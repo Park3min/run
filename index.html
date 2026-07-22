@@ -310,9 +310,9 @@
       </div>
       <div class="field">
         <button class="btn secondary" id="btnGarmin" type="button">⌚ 가민 커넥트에서 가져오기</button>
-        <button class="btn secondary" id="btnNrc" type="button" style="margin-top:8px">📷 Nike Run Club 캡처 인식</button>
-        <input type="file" id="nrcInput" accept="image/*" hidden>
-        <div class="hint" id="csvStatus">가민 커넥트 연동, 또는 NRC 결과 화면 스크린샷으로 기록을 자동으로 채웁니다</div>
+        <button class="btn secondary" id="btnShot" type="button" style="margin-top:8px">📷 러닝 앱 캡처 인식</button>
+        <input type="file" id="shotInput" accept="image/*" hidden>
+        <div class="hint" id="csvStatus">가민 커넥트 연동, 또는 나이키·삼성 헬스·가민 등 러닝 앱 결과 화면 스크린샷으로 기록을 자동으로 채웁니다</div>
       </div>
       <div class="field">
         <label>표시 항목 (사진·영상에 표시)</label>
@@ -590,7 +590,7 @@
   }
   $('btnApply').addEventListener('click', applyRecord);
 
-  // ---------- Nike Run Club 스크린샷 인식 (OCR) ----------
+  // ---------- 러닝 앱 스크린샷 인식 (OCR) — 나이키·삼성 헬스·가민 등 ----------
   let tesseractPromise = null;
   function loadTesseract() {
     if (tesseractPromise) return tesseractPromise;
@@ -604,21 +604,29 @@
     return tesseractPromise;
   }
 
-  // OCR 텍스트에서 러닝 지표 추출 (NRC 결과 화면 기준, 라벨 없이 숫자 패턴으로)
-  function parseNrc(raw) {
+  // OCR 텍스트에서 러닝 지표 추출 — 앱마다 라벨이 달라 숫자 패턴으로 인식
+  // (나이키는 페이스를 5'42" 따옴표, 삼성·가민은 5:42 콜론으로 표기 → 둘 다 대응)
+  function parseRunShot(raw) {
     const text = ' ' + raw.replace(/[|]/g, ' ').replace(/[Oo](?=\d)|(?<=\d)[Oo]/g, '0') + ' ';
     const res = {};
 
-    // 페이스: m'ss" (NRC는 따옴표로 표기 → 시간과 구분됨)
+    // 페이스 (따옴표 표기): m'ss" → 시간과 확실히 구분됨
     let m = text.match(/(\d)\s*['’`´]\s*(\d{2})/);
-    if (m) { const s = (+m[1]) * 60 + (+m[2]); if (s >= 120 && s <= 1200) res.paceSec = s; }
+    if (m) { const s = (+m[1]) * 60 + (+m[2]); if (s >= 90 && s <= 1200) res.paceSec = s; }
 
-    // 시간: mm:ss 또는 h:mm:ss (콜론 표기)
-    const times = [...text.matchAll(/(\d{1,2}):(\d{2})(?::(\d{2}))?/g)].map(t => {
+    // 콜론 시간 토큰 모두 수집 (mm:ss 또는 h:mm:ss)
+    const colon = [...text.matchAll(/(?<!\d)(\d{1,2}):(\d{2})(?::(\d{2}))?(?!\d)/g)].map(t => {
       const a = +t[1], b = +t[2], c = t[3] !== undefined ? +t[3] : null;
       return c !== null ? a * 3600 + b * 60 + c : a * 60 + b;
-    }).filter(s => s >= 30 && s <= 6 * 3600);
-    if (times.length) res.timeSec = Math.max(...times); // 총 시간은 보통 가장 큼
+    }).filter(s => s >= 20 && s <= 6 * 3600);
+    if (colon.length) {
+      res.timeSec = Math.max(...colon); // 총 시간은 보통 가장 큰 값
+      // 따옴표 페이스가 없으면, 콜론 표기 페이스를 (최댓값이 아닌) 페이스대 값에서 추정
+      if (!res.paceSec) {
+        const cand = colon.filter(s => s !== res.timeSec && s >= 120 && s <= 900).sort((a, b) => a - b);
+        if (cand.length) res.paceSec = cand[0];
+      }
+    }
 
     // 거리: 소수 (소수 2자리 우선, 페이스·시간 콜론/따옴표와 무관)
     const dec = [...text.matchAll(/(?<![:'’.\d])(\d{1,2})[.,](\d{1,2})(?![:'’.\d])/g)]
@@ -635,10 +643,15 @@
     // 세 값 중 둘로 나머지 보정 (거리 = 시간 ÷ 페이스)
     if (!res.distKm && res.timeSec && res.paceSec) res.distKm = res.timeSec / res.paceSec;
     if (!res.timeSec && res.distKm && res.paceSec) res.timeSec = Math.round(res.distKm * res.paceSec);
+    // 거리·시간이 모두 있으면 페이스는 파생값을 신뢰 (오인식 페이스 보정)
+    if (res.distKm && res.timeSec) {
+      const derived = res.timeSec / res.distKm;
+      if (!res.paceSec || Math.abs(derived - res.paceSec) / derived > 0.25) res.paceSec = derived;
+    }
     return res;
   }
 
-  async function handleNrcFile(file) {
+  async function handleRunShot(file) {
     $('csvStatus').textContent = '📷 스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)';
     let url;
     try {
@@ -650,7 +663,7 @@
             $('csvStatus').textContent = `📷 인식 중… ${Math.round(msg.progress * 100)}%`;
         },
       });
-      const r = parseNrc(data.text);
+      const r = parseRunShot(data.text);
       if (r.distKm) $('inDist').value = r.distKm.toFixed(2);
       if (r.timeSec) $('inTime').value = fmtTime(r.timeSec).replace(/^0:/, '');
       if (r.hr) $('inHr').value = r.hr;
@@ -670,7 +683,7 @@
       } else if (parts.length) {
         $('csvStatus').textContent = `△ 일부만 인식됨 — ${parts.join(' · ')} · 나머지는 직접 입력 후 '기록 표시하기'`;
       } else {
-        $('csvStatus').textContent = '✕ 값을 인식하지 못했어요. 거리·시간 숫자가 크고 선명한 NRC 결과 화면인지 확인해 주세요.';
+        $('csvStatus').textContent = '✕ 값을 인식하지 못했어요. 거리·시간 숫자가 크고 선명한 러닝 결과 화면인지 확인해 주세요.';
       }
     } catch (e) {
       $('csvStatus').textContent = `✕ ${e.message || '인식 실패'}`;
@@ -678,12 +691,12 @@
       if (url) setTimeout(() => URL.revokeObjectURL(url), 5000);
     }
   }
-  $('btnNrc').addEventListener('click', () => $('nrcInput').click());
-  $('nrcInput').addEventListener('change', () => {
-    if ($('nrcInput').files[0]) handleNrcFile($('nrcInput').files[0]);
-    $('nrcInput').value = '';
+  $('btnShot').addEventListener('click', () => $('shotInput').click());
+  $('shotInput').addEventListener('change', () => {
+    if ($('shotInput').files[0]) handleRunShot($('shotInput').files[0]);
+    $('shotInput').value = '';
   });
-  window.__parseNrc = parseNrc; // 개발용 훅
+  window.__parseRunShot = parseRunShot; // 개발용 훅
 
   // ---------- Garmin Connect 연동 (로컬 서버 → 웹 중계 순으로 시도) ----------
   const GARMIN_BASE = 'http://localhost:5077';
