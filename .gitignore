@@ -8,3 +8,7 @@ __pycache__/
 
 # 로컬 도구 설정
 .claude/
+
+# Cloudflare wrangler 로컬 캐시
+.wrangler/
+node_modules/
