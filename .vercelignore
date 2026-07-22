@@ -1,0 +1,10 @@
+# Vercel은 정적 파일(index.html, garmin-web.js)만 서빙 — 서버/워커/로컬 파일 제외
+garmin_server.py
+cloudflare-worker.js
+wrangler.toml
+.wrangler/
+.venv/
+__pycache__/
+*.pyc
+.claude/
+README.md
