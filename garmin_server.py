@@ -188,15 +188,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         try:
-            if url.path in ("/", "/index.html"):
+            static_files = {
+                "/": ("index.html", "text/html; charset=utf-8"),
+                "/index.html": ("index.html", "text/html; charset=utf-8"),
+                "/garmin-web.js": ("garmin-web.js", "application/javascript; charset=utf-8"),
+            }
+            if url.path in static_files:
+                fname, ctype = static_files[url.path]
                 try:
-                    with open(os.path.join(APP_DIR, "index.html"), "rb") as f:
+                    with open(os.path.join(APP_DIR, fname), "rb") as f:
                         body = f.read()
                 except FileNotFoundError:
-                    self._send(404, {"error": "index.html not found"})
+                    self._send(404, {"error": fname + " not found"})
                     return
                 self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)

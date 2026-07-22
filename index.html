@@ -387,7 +387,36 @@
   <div class="modal-box">
     <h2>가민 커넥트 — 활동 선택</h2>
     <div class="g-list" id="gList"></div>
-    <button class="btn secondary" id="gClose">닫기</button>
+    <div class="row2">
+      <button class="btn secondary" id="gClose">닫기</button>
+      <button class="btn secondary" id="gwLogout" style="display:none">연동 해제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 가민 웹 로그인 -->
+<div class="modal" id="gwModal">
+  <div class="modal-box">
+    <h2>가민 커넥트 로그인</h2>
+    <div class="field">
+      <label for="gwEmail">이메일</label>
+      <input id="gwEmail" type="email" autocomplete="username" placeholder="가민 계정 이메일">
+    </div>
+    <div class="field" id="gwPwField">
+      <label for="gwPw">비밀번호</label>
+      <input id="gwPw" type="password" autocomplete="current-password">
+    </div>
+    <div class="field" id="gwMfaField" style="display:none">
+      <label for="gwMfa">인증 코드 (MFA)</label>
+      <input id="gwMfa" type="text" inputmode="numeric" placeholder="이메일/앱으로 받은 코드">
+    </div>
+    <div class="hint" id="gwStatus">
+      로그인 정보는 가민 서버로만 전달되고, 발급된 연동 토큰은 이 브라우저에만 저장됩니다.
+    </div>
+    <div class="row2" style="margin-top:12px">
+      <button class="btn secondary" id="gwCancel">취소</button>
+      <button class="btn" id="gwSubmit">로그인</button>
+    </div>
   </div>
 </div>
 
@@ -415,6 +444,7 @@
   <div class="cap-hint" id="capHint">화면을 클릭하면 애니메이션이 다시 재생됩니다 · 이 상태에서 화면 녹화를 하세요</div>
 </div>
 
+<script src="garmin-web.js"></script>
 <script>
 (() => {
   'use strict';
@@ -637,27 +667,105 @@
   });
   window.__importCSV = importGarminCSV; // 개발용 훅
 
-  // ---------- Garmin Connect 연동 (로컬 서버) ----------
+  // ---------- Garmin Connect 연동 (로컬 서버 → 웹 중계 순으로 시도) ----------
   const GARMIN_BASE = 'http://localhost:5077';
+  const GARMIN_PROXY = localStorage.getItem('garminProxyUrl') || 'PROXY_URL_PLACEHOLDER';
+  const proxyReady = !GARMIN_PROXY.includes('PLACEHOLDER');
+  let gSource = 'local'; // 'local' | 'web'
+  let gw = null;
+  const getGw = () => {
+    if (!gw && window.GarminWeb && proxyReady) gw = new GarminWeb(GARMIN_PROXY);
+    return gw;
+  };
   const paceToInput = sec => {
     const m = Math.floor(sec / 60), s = Math.round(sec % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
   $('btnGarmin').addEventListener('click', async () => {
-    $('csvStatus').textContent = '가민 연동 서버에 연결 중…';
+    $('csvStatus').textContent = '가민 연동 확인 중…';
+    // 1) 같은 컴퓨터의 로컬 서버 먼저 시도 (빠른 타임아웃)
     try {
-      const r = await fetch(`${GARMIN_BASE}/activities?limit=20`);
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 1500);
+      const r = await fetch(`${GARMIN_BASE}/activities?limit=20`, { signal: ac.signal });
+      clearTimeout(timer);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'server');
+      gSource = 'local';
       openGarminPicker(data.activities || []);
       $('csvStatus').textContent = '';
-    } catch (e) {
-      const onWeb = location.protocol === 'https:';
-      $('csvStatus').textContent = onWeb
-        ? '✕ 이 컴퓨터의 연동 서버에 연결하지 못했어요. 터미널에서 "python3 garmin_server.py" 를 실행 중인지, 브라우저가 로컬 네트워크 접근 권한을 물어보면 허용했는지 확인해 주세요.'
-        : '✕ 연동 서버가 꺼져 있어요. 터미널에서 "python3 garmin_server.py" 를 실행한 뒤 다시 눌러 주세요.';
+      return;
+    } catch (e) { /* 로컬 서버 없음 → 웹 중계로 */ }
+    // 2) 웹 중계 (브라우저에 저장된 토큰 사용, 없으면 로그인)
+    if (getGw()) {
+      if (gw.hasAuth()) {
+        await loadWebActivities();
+      } else {
+        openGwLogin();
+      }
+      return;
     }
+    $('csvStatus').textContent = location.protocol === 'https:'
+      ? '✕ 가민 연동을 사용할 수 없어요. 중계 서버 주소가 설정되지 않았습니다.'
+      : '✕ 연동 서버가 꺼져 있어요. 터미널에서 "python3 garmin_server.py" 를 실행한 뒤 다시 눌러 주세요.';
+  });
+
+  async function loadWebActivities() {
+    $('csvStatus').textContent = '가민 커넥트에서 불러오는 중…';
+    try {
+      const acts = await gw.getActivities(20);
+      gSource = 'web';
+      openGarminPicker(acts);
+      $('csvStatus').textContent = '';
+    } catch (e) {
+      if (/로그인|만료/.test(e.message)) { openGwLogin(); return; }
+      $('csvStatus').textContent = `✕ ${e.message}`;
+    }
+  }
+
+  // ---- 웹 로그인 모달 ----
+  function openGwLogin() {
+    $('csvStatus').textContent = '';
+    $('gwMfaField').style.display = 'none';
+    $('gwMfa').value = '';
+    $('gwStatus').textContent = '로그인 정보는 가민 서버로만 전달되고, 발급된 연동 토큰은 이 브라우저에만 저장됩니다.';
+    $('gwModal').classList.add('show');
+  }
+  $('gwCancel').addEventListener('click', () => $('gwModal').classList.remove('show'));
+  $('gwModal').addEventListener('click', e => {
+    if (e.target === $('gwModal')) $('gwModal').classList.remove('show');
+  });
+  $('gwSubmit').addEventListener('click', async () => {
+    const btn = $('gwSubmit');
+    btn.disabled = true;
+    try {
+      const mfaMode = $('gwMfaField').style.display !== 'none';
+      if (mfaMode) {
+        $('gwStatus').textContent = '인증 코드 확인 중…';
+        await gw.submitMfa($('gwMfa').value.trim());
+      } else {
+        $('gwStatus').textContent = '가민에 로그인 중…';
+        const r = await gw.login($('gwEmail').value.trim(), $('gwPw').value);
+        if (r.mfa) {
+          $('gwMfaField').style.display = '';
+          $('gwStatus').textContent = '인증 코드가 필요합니다. 이메일/인증 앱에서 코드를 확인해 입력해 주세요.';
+          btn.disabled = false;
+          return;
+        }
+      }
+      $('gwPw').value = '';
+      $('gwModal').classList.remove('show');
+      await loadWebActivities();
+    } catch (e) {
+      $('gwStatus').textContent = `✕ ${e.message}`;
+    }
+    btn.disabled = false;
+  });
+  $('gwLogout').addEventListener('click', () => {
+    if (gw) gw.logout();
+    $('gModal').classList.remove('show');
+    $('csvStatus').textContent = '이 브라우저의 가민 연동을 해제했습니다.';
   });
 
   function openGarminPicker(acts) {
@@ -678,6 +786,7 @@
       b.addEventListener('click', () => pickGarminActivity(a));
       list.appendChild(b);
     });
+    $('gwLogout').style.display = gSource === 'web' ? '' : 'none';
     $('gModal').classList.add('show');
   }
   const escapeHtml = s => String(s).replace(/[&<>"']/g,
@@ -698,9 +807,14 @@
     $('inSplits').value = '';
     state.lapLabels = null;
     try {
-      const r = await fetch(`${GARMIN_BASE}/activity/${a.id}/splits`);
-      const data = await r.json();
-      const laps = (data.splits || []).filter(l => l.paceSec > 0);
+      let rawLaps;
+      if (gSource === 'web') {
+        rawLaps = await gw.getSplits(a.id);
+      } else {
+        const r = await fetch(`${GARMIN_BASE}/activity/${a.id}/splits`);
+        rawLaps = (await r.json()).splits;
+      }
+      const laps = (rawLaps || []).filter(l => l.paceSec > 0);
       if (laps.length > 1) {
         $('inSplits').value = laps.map(l => paceToInput(l.paceSec)).join('\n');
         const allKm = laps.every(l => Math.abs(l.distanceKm - 1) < 0.12);
