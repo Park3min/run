@@ -26,9 +26,14 @@ const ALLOWED_ORIGINS = new Set([
   "null", // file:// 로 연 로컬 앱
 ]);
 
+// 정적 목록 + 모든 *.vercel.app (프로덕션·프리뷰 배포) 허용
+function isAllowedOrigin(origin) {
+  return ALLOWED_ORIGINS.has(origin) || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
+}
+
 function corsHeaders(origin) {
   return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) ? origin : "https://park3min.github.io",
+    "Access-Control-Allow-Origin": isAllowedOrigin(origin) ? origin : "https://park3min.github.io",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "*",
     "Access-Control-Expose-Headers": "X-Status,X-Location,X-Set-Cookies",
