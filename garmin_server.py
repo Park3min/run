@@ -14,7 +14,7 @@ import inspect
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 try:
@@ -159,15 +159,28 @@ def get_splits(activity_id: str) -> list:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _cors(self) -> None:
+        # file:// 로 연 앱과 공개 웹(GitHub Pages)에서 모두 접근 허용
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        # 공개 사이트 → localhost 요청에 대한 브라우저 사전 검사(PNA/LNA) 허용
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+
     def _send(self, code: int, payload) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        # 로컬 파일(file://)에서 열린 앱도 접근할 수 있도록 허용
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def log_message(self, fmt, *args):
         pass  # 조용히
@@ -204,4 +217,4 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print(f"서버 실행 중 — 브라우저에서 열기:  http://localhost:{PORT}")
     print("종료: Ctrl+C")
-    HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

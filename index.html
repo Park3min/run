@@ -653,8 +653,10 @@
       openGarminPicker(data.activities || []);
       $('csvStatus').textContent = '';
     } catch (e) {
-      $('csvStatus').textContent =
-        '✕ 연동 서버가 꺼져 있어요. 터미널에서 "python3 garmin_server.py" 를 실행한 뒤 다시 눌러 주세요.';
+      const onWeb = location.protocol === 'https:';
+      $('csvStatus').textContent = onWeb
+        ? '✕ 이 컴퓨터의 연동 서버에 연결하지 못했어요. 터미널에서 "python3 garmin_server.py" 를 실행 중인지, 브라우저가 로컬 네트워크 접근 권한을 물어보면 허용했는지 확인해 주세요.'
+        : '✕ 연동 서버가 꺼져 있어요. 터미널에서 "python3 garmin_server.py" 를 실행한 뒤 다시 눌러 주세요.';
     }
   });
 
