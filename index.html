@@ -640,30 +640,79 @@
     let cd = text.match(/(\d{2,3})\s*(?:spm|SPM)/) || text.match(/(?:케이던스|cadence)\D{0,6}(\d{2,3})/i);
     if (cd) { const v = +cd[1]; if (v >= 120 && v <= 260) res.cadence = v; }
 
-    // 세 값 중 둘로 나머지 보정 (거리 = 시간 ÷ 페이스)
-    if (!res.distKm && res.timeSec && res.paceSec) res.distKm = res.timeSec / res.paceSec;
-    if (!res.timeSec && res.distKm && res.paceSec) res.timeSec = Math.round(res.distKm * res.paceSec);
-    // 거리·시간이 모두 있으면 페이스는 파생값을 신뢰 (오인식 페이스 보정)
-    if (res.distKm && res.timeSec) {
-      const derived = res.timeSec / res.distKm;
-      if (!res.paceSec || Math.abs(derived - res.paceSec) / derived > 0.25) res.paceSec = derived;
+    return res; // 값 역산은 handleRunShot 에서 (밴드 병합 후)
+  }
+
+  // 사진 위 오버레이 글씨는 전체를 한 번에 못 읽으므로, 가로 밴드로 잘라 각각 인식한다.
+  // 각 밴드: 폭 기준 확대 + 그레이스케일 + 대비 강화 + (배경이 어두우면) 자동 반전.
+  function shotBand(img, y0, y1) {
+    const scale = Math.max(1.6, 1400 / img.naturalWidth);
+    const sy = Math.round(y0 * img.naturalHeight), sh = Math.round((y1 - y0) * img.naturalHeight);
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.naturalWidth * scale);
+    cv.height = Math.round(sh * scale);
+    const g = cv.getContext('2d');
+    g.drawImage(img, 0, sy, img.naturalWidth, sh, 0, 0, cv.width, cv.height);
+    const id = g.getImageData(0, 0, cv.width, cv.height), d = id.data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const invert = sum / (d.length / 4) < 128; // 어두운 배경 → 밝은 글씨 → 반전
+    for (let i = 0; i < d.length; i += 4) {
+      let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      v = (v - 128) * 1.9 + 128;
+      if (invert) v = 255 - v;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+      d[i] = d[i + 1] = d[i + 2] = v;
     }
-    return res;
+    g.putImageData(id, 0, 0);
+    return cv;
+  }
+  const shotEnough = r => r.distKm != null && (r.timeSec != null || r.paceSec != null);
+  async function ocrRunShot(worker, img) {
+    // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
+    await worker.setParameters({ tessedit_pageseg_mode: '3' });
+    $('csvStatus').textContent = '📷 인식 중… 25%';
+    let r = parseRunShot((await worker.recognize(img)).data.text.replace(/\n/g, ' '));
+    if (shotEnough(r)) return r;
+
+    // 2차: 가로 밴드 (사진 위 오버레이 공유 카드 — 밝기 따라 자동 반전)
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    const bands = [[0, 0.25], [0.18, 0.43], [0.36, 0.61], [0.54, 0.79], [0.72, 0.97], [0.88, 1]];
+    let text = '';
+    for (let i = 0; i < bands.length; i++) {
+      text += ' ' + (await worker.recognize(shotBand(img, bands[i][0], bands[i][1]))).data.text.replace(/\n/g, ' ');
+      $('csvStatus').textContent = `📷 인식 중… ${30 + Math.round((i + 1) / bands.length * 65)}%`;
+    }
+    return parseRunShot(text);
+  }
+  function loadImageFile(file) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error('이미지를 열지 못했어요.'));
+      img.src = URL.createObjectURL(file);
+    });
   }
 
   async function handleRunShot(file) {
     $('csvStatus').textContent = '📷 스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)';
-    let url;
+    let worker;
     try {
       const T = await loadTesseract();
-      url = URL.createObjectURL(file);
-      const { data } = await T.recognize(url, 'eng', {
-        logger: msg => {
-          if (msg.status === 'recognizing text')
-            $('csvStatus').textContent = `📷 인식 중… ${Math.round(msg.progress * 100)}%`;
-        },
-      });
-      const r = parseRunShot(data.text);
+      const img = await loadImageFile(file);
+      worker = await T.createWorker('eng', 1);
+      // 전체 인식 → 부족하면 가로 밴드 인식으로 폴백
+      const r = await ocrRunShot(worker, img);
+
+      // 값 역산 (거리·시간·페이스 중 둘만 있어도 나머지 계산)
+      let timeDerived = false;
+      if (r.distKm == null && r.timeSec != null && r.paceSec != null) r.distKm = r.timeSec / r.paceSec;
+      if (r.timeSec == null && r.distKm != null && r.paceSec != null) { r.timeSec = Math.round(r.distKm * r.paceSec); timeDerived = true; }
+      if (r.distKm != null && r.timeSec != null) {
+        const derived = r.timeSec / r.distKm;
+        if (r.paceSec == null || Math.abs(derived - r.paceSec) / derived > 0.25) r.paceSec = derived;
+      }
+
       if (r.distKm) $('inDist').value = r.distKm.toFixed(2);
       if (r.timeSec) $('inTime').value = fmtTime(r.timeSec).replace(/^0:/, '');
       if (r.hr) $('inHr').value = r.hr;
@@ -672,23 +721,24 @@
 
       const parts = [];
       if (r.distKm) parts.push(`거리 ${r.distKm.toFixed(2)}km`);
-      if (r.timeSec) parts.push(`시간 ${fmtTime(r.timeSec)}`);
+      if (r.timeSec) parts.push(`시간 ${fmtTime(r.timeSec)}${timeDerived ? '(계산)' : ''}`);
       if (r.paceSec) parts.push(`페이스 ${fmtPace(r.paceSec)}`);
       if (r.hr) parts.push(`심박 ${r.hr}`);
       if (r.cadence) parts.push(`케이던스 ${r.cadence}`);
 
       if (r.distKm && r.timeSec) {
         applyRecord();
-        $('csvStatus').textContent = `✓ 인식됨 — ${parts.join(' · ')} · 값이 맞는지 확인하고 필요하면 수정하세요`;
+        const note = timeDerived ? ' · 총 시간은 거리·페이스로 계산했어요' : '';
+        $('csvStatus').textContent = `✓ 인식됨 — ${parts.join(' · ')} · 값이 맞는지 확인하고 필요하면 수정하세요${note}`;
       } else if (parts.length) {
         $('csvStatus').textContent = `△ 일부만 인식됨 — ${parts.join(' · ')} · 나머지는 직접 입력 후 '기록 표시하기'`;
       } else {
-        $('csvStatus').textContent = '✕ 값을 인식하지 못했어요. 거리·시간 숫자가 크고 선명한 러닝 결과 화면인지 확인해 주세요.';
+        $('csvStatus').textContent = '✕ 값을 인식하지 못했어요. 거리·시간(또는 페이스) 숫자가 크고 선명한 러닝 결과 화면인지 확인해 주세요.';
       }
     } catch (e) {
       $('csvStatus').textContent = `✕ ${e.message || '인식 실패'}`;
     } finally {
-      if (url) setTimeout(() => URL.revokeObjectURL(url), 5000);
+      if (worker) { try { await worker.terminate(); } catch (e) { /* ignore */ } }
     }
   }
   $('btnShot').addEventListener('click', () => $('shotInput').click());
