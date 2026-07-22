@@ -669,7 +669,7 @@
 
   // ---------- Garmin Connect 연동 (로컬 서버 → 웹 중계 순으로 시도) ----------
   const GARMIN_BASE = 'http://localhost:5077';
-  const GARMIN_PROXY = localStorage.getItem('garminProxyUrl') || 'PROXY_URL_PLACEHOLDER';
+  const GARMIN_PROXY = localStorage.getItem('garminProxyUrl') || 'https://garmin-proxy.kipi2000.workers.dev';
   const proxyReady = !GARMIN_PROXY.includes('PLACEHOLDER');
   let gSource = 'local'; // 'local' | 'web'
   let gw = null;
