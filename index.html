@@ -305,14 +305,18 @@
           <input id="inHr" type="number" min="0" inputmode="numeric" placeholder="예: 156" value="156">
         </div>
       </div>
+      <div class="field">
+        <label for="inTitle">러닝 제목 (선택)</label>
+        <input id="inTitle" type="text" placeholder="예: 한강 아침 러닝">
+      </div>
       <div class="row2">
-        <div class="field">
-          <label for="inTitle">러닝 제목 (선택)</label>
-          <input id="inTitle" type="text" placeholder="예: 한강 아침 러닝">
-        </div>
         <div class="field">
           <label for="inDate">날짜</label>
           <input id="inDate" type="date">
+        </div>
+        <div class="field">
+          <label for="inStartTime">시작 시각 (선택)</label>
+          <input id="inStartTime" type="time">
         </div>
       </div>
       <div class="field">
@@ -366,6 +370,7 @@
         <h2>구간 기록</h2>
         <div id="splitsView"></div>
       </div>
+      <button class="btn secondary" id="btnStatsPng">🎞️ 기록만 투명 PNG로 저장 (사진 없이)</button>
       <button class="btn secondary" id="btnCapture">▶ 영상 캡처 모드 — 빈 배경에서 카운트업만 재생</button>
     </div>
   </div>
@@ -479,7 +484,7 @@
   // ---------- state ----------
   const state = {
     dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0,
-    title: '', date: '', splits: [], lapLabels: null,
+    title: '', date: '', startTime: '', splits: [], lapLabels: null,
     img: null,
     style: 'gradient', pos: 'bottom', align: 'left',
     showDate: true, splitsOnPhoto: false,
@@ -525,6 +530,12 @@
     if (!iso) return '';
     const [y, m, d] = iso.split('-');
     return `${y}.${m}.${d}`;
+  }
+  // 날짜 + (있으면) 시작 시각 — "2026.07.13 05:40"
+  function fmtDateWhen() {
+    const d = fmtDate(state.date);
+    if (!d) return '';
+    return state.startTime ? `${d} ${state.startTime}` : d;
   }
 
   // ---------- count-up animation ----------
@@ -591,6 +602,7 @@
     state.hr = parseInt($('inHr').value, 10) || 0;
     state.title = $('inTitle').value.trim();
     state.date = $('inDate').value;
+    state.startTime = $('inStartTime').value;
     state.splits = parseSplits($('inSplits').value);
     if (state.lapLabels && state.lapLabels.length !== state.splits.length) state.lapLabels = null;
 
@@ -609,14 +621,14 @@
   };
   // 입력란만 비움 (새 기록 불러오기 전 기존 값 제거용)
   function clearInputFields() {
-    ['inDist', 'inTime', 'inCad', 'inHr', 'inTitle', 'inSplits'].forEach(id => { $(id).value = ''; });
+    ['inDist', 'inTime', 'inCad', 'inHr', 'inTitle', 'inSplits', 'inStartTime'].forEach(id => { $(id).value = ''; });
     $('inDate').value = todayISO();
     state.lapLabels = null;
   }
   // 입력·표시·상태 전체 초기화 (초기화 버튼)
   function resetRecord() {
     clearInputFields();
-    Object.assign(state, { dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0, title: '', date: $('inDate').value, splits: [] });
+    Object.assign(state, { dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0, title: '', date: $('inDate').value, startTime: '', splits: [] });
     $('stDist').textContent = '0.00';
     $('stPace').textContent = `0'00"`;
     $('stTime').textContent = '0:00';
@@ -1032,7 +1044,7 @@
     if (a.avgHr) $('inHr').value = a.avgHr;
     if (a.cadence) $('inCad').value = a.cadence;
     if (a.name) $('inTitle').value = a.name;
-    if (a.start) $('inDate').value = a.start.slice(0, 10);
+    if (a.start) { $('inDate').value = a.start.slice(0, 10); $('inStartTime').value = a.start.slice(11, 16); }
 
     $('inSplits').value = '';
     state.lapLabels = null;
@@ -1063,7 +1075,7 @@
     localStorage.setItem('runRecord', JSON.stringify({
       dist: $('inDist').value, time: $('inTime').value,
       cad: state.cad, hr: state.hr,
-      title: state.title, date: state.date,
+      title: state.title, date: state.date, startTime: state.startTime,
       splitsText: $('inSplits').value,
       lapLabels: state.lapLabels,
       style: state.style, pos: state.pos, align: state.align,
@@ -1081,6 +1093,7 @@
       $('inHr').value = saved.hr;
       $('inTitle').value = saved.title || '';
       $('inDate').value = saved.date || '';
+      $('inStartTime').value = saved.startTime || '';
       $('inSplits').value = saved.splitsText || '';
       state.lapLabels = saved.lapLabels || null;
       state.style = saved.style || 'gradient';
@@ -1211,7 +1224,7 @@
     const titleSize = u * 3.2, bigSize = u * 11, labelSize = u * 2.6,
           valSize = u * 4.6, gap = u * 8, splitSize = u * 2.4;
 
-    const titleText = [state.title, state.showDate ? fmtDate(state.date) : null]
+    const titleText = [state.title, state.showDate ? fmtDateWhen() : null]
       .filter(Boolean).join('  ·  ');
     const hasTitleLine = !!titleText;
 
@@ -1438,6 +1451,35 @@
   $('btnSave').addEventListener('click', () => { if (state.img) saveImage(canvas, ''); });
   $('btnStory').addEventListener('click', () => { if (state.img) saveImage(makeStoryCanvas(), 'story-'); });
 
+  // 사진 없이 기록만 투명 배경 PNG 로 (미니멀 스타일로 그린 뒤 불투명 픽셀에 맞게 크롭)
+  function makeStatsCanvas() {
+    const W = 1400, H = 1600;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'); // 투명 배경 (지우지 않음)
+    const saved = { style: state.style, align: state.align, customPos: state.customPos };
+    state.style = 'minimal'; state.align = 'left'; state.customPos = { fx: 70 / W, fy: 70 / H };
+    renderRecord(c, W, H);
+    Object.assign(state, saved);
+    // 불투명(반투명 그림자 포함) 픽셀의 경계로 잘라 딱 맞는 투명 PNG 생성
+    const d = c.getImageData(0, 0, W, H).data;
+    let minX = W, minY = H, maxX = 0, maxY = 0, found = false;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (d[(y * W + x) * 4 + 3] > 8) { found = true; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    }
+    if (!found) return cv;
+    const pad = 24;
+    minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+    maxX = Math.min(W - 1, maxX + pad); maxY = Math.min(H - 1, maxY + pad);
+    const cw = maxX - minX + 1, ch = maxY - minY + 1;
+    const out = document.createElement('canvas'); out.width = cw; out.height = ch;
+    out.getContext('2d').drawImage(cv, minX, minY, cw, ch, 0, 0, cw, ch);
+    return out;
+  }
+  $('btnStatsPng').addEventListener('click', () => {
+    if (!(state.dist > 0)) { alert('먼저 기록을 입력하고 "기록 표시하기"를 눌러 주세요.'); return; }
+    saveImage(makeStatsCanvas(), 'stats-');
+  });
+
   // ---------- 영상 캡처 모드 ----------
   const capOverlay = $('capOverlay');
   const capControls = $('capControls');
@@ -1445,7 +1487,7 @@
   let idleTimer = null;
 
   function capReplay() {
-    const titleText = [state.title, state.showDate ? fmtDate(state.date) : null]
+    const titleText = [state.title, state.showDate ? fmtDateWhen() : null]
       .filter(Boolean).join('  ·  ');
     $('capTitle').textContent = titleText;
     $('capTitle').style.display = titleText ? '' : 'none';
