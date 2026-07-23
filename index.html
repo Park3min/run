@@ -716,29 +716,34 @@
       t: w.text || '',
       cx: (w.bbox.x0 + w.bbox.x1) / 2,
       cy: (w.bbox.y0 + w.bbox.y1) / 2,
+      h: Math.max(1, w.bbox.y1 - w.bbox.y0),        // 글자 높이 (해상도 무관 임계값 기준)
     }));
     const numOf = t => {
-      if (/[:'’".]/.test(t)) return null;   // 시간/페이스/거리 제외
+      if (/[:'’".]/.test(t)) return null;           // 시간/페이스/거리 제외
       const m = t.match(/\d{2,3}/);
       return m ? parseInt(m[0], 10) : null;
     };
-    // 앵커(라벨) 바로 위에서 값 범위 안의 가장 가까운 숫자
-    const valueAbove = (anchor, lo, hi) => {
-      let best = null, bestDy = Infinity;
+    // 라벨(앵커) 기준: 값이 '바로 위'(라벨 아래 배치) 또는 '같은 줄 왼쪽'(bpm 등 단위 오른쪽) —
+    // 임계값은 라벨 글자 높이에 비례시켜 캡처 해상도가 달라도 동작하게 한다.
+    const valueNear = (anchor, lo, hi) => {
+      const H = anchor.h;
+      let best = null, bestD = Infinity;
       for (const w of W) {
         const v = numOf(w.t);
         if (v == null || v < lo || v > hi) continue;
-        const dy = anchor.cy - w.cy;               // 라벨보다 위(dy>0)
-        if (dy <= 0 || dy > 260) continue;
-        if (Math.abs(w.cx - anchor.cx) > 180) continue;
-        if (dy < bestDy) { bestDy = dy; best = v; }
+        const dx = w.cx - anchor.cx, dy = w.cy - anchor.cy;
+        const above = dy < 0 && -dy <= H * 6 && Math.abs(dx) <= H * 8;      // 라벨 위
+        const leftSame = Math.abs(dy) <= H * 1.8 && dx < 0 && -dx <= H * 14; // 같은 줄 왼쪽
+        if (!above && !leftSame) continue;
+        const d = Math.hypot(dx, dy);
+        if (d < bestD) { bestD = d; best = v; }
       }
       return best;
     };
     const res = {};
     for (const w of W) {
-      if (res.hr == null && /심박|bpm/i.test(w.t)) { const v = valueAbove(w, 40, 230); if (v != null) res.hr = v; }
-      if (res.cadence == null && /케이던|던스|이던|cadence|spm/i.test(w.t)) { const v = valueAbove(w, 120, 260); if (v != null) res.cadence = v; }
+      if (res.hr == null && /심박|bpm/i.test(w.t)) { const v = valueNear(w, 40, 230); if (v != null) res.hr = v; }
+      if (res.cadence == null && /케이던|던스|이던|cadence|spm/i.test(w.t)) { const v = valueNear(w, 120, 260); if (v != null) res.cadence = v; }
     }
     return res;
   }
@@ -749,6 +754,10 @@
     await worker.setParameters({ tessedit_pageseg_mode: '3' });
     $('csvStatus').textContent = '📷 인식 중… 25%';
     const data = (await worker.recognize(img)).data;
+    window.__lastOCR = { // 진단용: ?debug 로 화면에 표시
+      text: data.text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim(),
+      words: (data.words || []).map(w => `${w.text}@${Math.round((w.bbox.x0 + w.bbox.x1) / 2)},${Math.round((w.bbox.y0 + w.bbox.y1) / 2)}`),
+    };
     let r = parseRunShot(data.text.replace(/\n/g, ' '));
     // 심박/케이던스는 라벨 위치로 보강 (단위 없거나 한글 라벨인 요약 카드 대응)
     const labeled = extractLabeledStats(data.words);
@@ -817,11 +826,27 @@
       } else {
         $('csvStatus').textContent = '✕ 값을 인식하지 못했어요. 거리·시간(또는 페이스) 숫자가 크고 선명한 러닝 결과 화면인지 확인해 주세요.';
       }
+      if (/[?&](debug|ocr)/i.test(location.search)) showOcrDebug(r);
     } catch (e) {
       $('csvStatus').textContent = `✕ ${e.message || '인식 실패'}`;
+      if (/[?&](debug|ocr)/i.test(location.search)) showOcrDebug({ error: String(e.message || e) });
     } finally {
       if (worker) { try { await worker.terminate(); } catch (e) { /* ignore */ } }
     }
+  }
+  // 진단 패널: ?debug=1 로 열면 실제 OCR 텍스트·단어 좌표를 화면에 표시 (스크린샷으로 공유용)
+  function showOcrDebug(r) {
+    let pre = document.getElementById('ocrDebug');
+    if (!pre) {
+      pre = document.createElement('pre');
+      pre.id = 'ocrDebug';
+      pre.style.cssText = 'white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.5;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;max-height:280px;overflow:auto;color:var(--ink-2)';
+      $('csvStatus').after(pre);
+    }
+    const o = window.__lastOCR || {};
+    pre.textContent = '[인식 결과] ' + JSON.stringify(r) +
+      '\n\n[OCR 텍스트]\n' + (o.text || '(없음)') +
+      '\n\n[단어@좌표]\n' + ((o.words || []).join('  ') || '(없음)');
   }
   $('btnShot').addEventListener('click', () => $('shotInput').click());
   $('shotInput').addEventListener('change', () => {
