@@ -711,44 +711,80 @@
   // 단어 위치(bbox)로 라벨↔숫자 연결 → 심박/케이던스 추출.
   // 요약 카드는 [숫자] 위, [라벨] 아래 배치 → 라벨 바로 위의 숫자를 그 지표로 본다.
   // (단위(bpm)가 없거나 라벨이 한글이라 텍스트만으론 구분이 안 되는 경우를 커버)
-  function extractLabeledStats(words) {
+  // 숫자 영역만 잘라 재인식 (이탤릭 큰 숫자 오인식 보정: 140→"740" 등).
+  // 배율·기울기(디스큐) 변형 여러 개로 시도하고, 값 범위 안에 드는 첫 결과를 채택
+  // — 이탤릭 '1'이 '7'로 흔들려도 한 변형에서 제대로 읽히면 잡힌다.
+  async function readNumberAt(worker, img, b, lo, hi) {
+    const H = b.y1 - b.y0, Wd = b.x1 - b.x0;
+    await worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789' });
+    // 전체/디스큐/왼쪽분리(단위 bpm 제외) 세 가지로 읽어 범위 내 다수결 (이탤릭 1↔7 흔들림 보정).
+    const combos = [[0, 1, 0], [0, 1, -0.16], [0, 0.72, 0]], S = 4; // [창시작, 창끝, 기울기]
+    const votes = {};
+    for (const [wx0, wx1, shx] of combos) {
+      const pad = Math.round(H * 0.3) + 8;
+      const sx = b.x0 + Wd * wx0 - pad, sw = Wd * (wx1 - wx0) + pad * 2, sy = b.y0 - pad, sh = H + pad * 2;
+      const crop = document.createElement('canvas'); crop.width = Math.max(1, Math.round(sw)); crop.height = Math.max(1, Math.round(sh));
+      crop.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+      const cc = document.createElement('canvas');
+      cc.width = Math.round((crop.width + Math.abs(shx) * crop.height) * S); cc.height = Math.round(crop.height * S);
+      const g = cc.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cc.width, cc.height);
+      g.setTransform(S, 0, shx * S, S, (shx < 0 ? -shx * crop.height * S : 0), 0);
+      g.drawImage(crop, 0, 0);
+      const m = (await worker.recognize(cc)).data.text.trim().match(/\d{2,3}/);
+      if (m) { const v = parseInt(m[0], 10); if (v >= lo && v <= hi) votes[v] = (votes[v] || 0) + 1; }
+    }
+    const entries = Object.entries(votes);
+    if (!entries.length) return null;
+    entries.sort((a, b) => b[1] - a[1]);
+    return parseInt(entries[0][0], 10);
+  }
+
+  // 단어 위치(bbox)로 라벨↔숫자 연결 → 심박/케이던스 추출.
+  // 요약 카드는 [숫자] 위, [라벨] 아래 배치 → 라벨 바로 위(또는 단위면 같은 줄 왼쪽)의 숫자를 그 지표로 본다.
+  async function extractLabeledStats(worker, img, words) {
     const W = (words || []).map(w => ({
-      t: w.text || '',
+      t: w.text || '', b: w.bbox,
       cx: (w.bbox.x0 + w.bbox.x1) / 2,
       cy: (w.bbox.y0 + w.bbox.y1) / 2,
       h: Math.max(1, w.bbox.y1 - w.bbox.y0),        // 글자 높이 (해상도 무관 임계값 기준)
     }));
-    const numOf = t => {
-      if (/[:'’".]/.test(t)) return null;           // 시간/페이스/거리 제외
-      const m = t.match(/\d{2,3}/);
-      return m ? parseInt(m[0], 10) : null;
-    };
-    // 라벨(앵커) 기준: 값이 '바로 위'(라벨 아래 배치) 또는 '같은 줄 왼쪽'(bpm 등 단위 오른쪽) —
-    // 임계값은 라벨 글자 높이에 비례시켜 캡처 해상도가 달라도 동작하게 한다.
-    const valueNear = (anchor, lo, hi) => {
+    const numText = t => t.match(/\d{2,3}/) ? parseInt(t.match(/\d{2,3}/)[0], 10) : null;
+    // 라벨(앵커) 기준으로 가장 가까운 '숫자 포함' 단어 (값 범위는 재인식 후 검증)
+    const wordNear = anchor => {
       const H = anchor.h;
       let best = null, bestD = Infinity;
       for (const w of W) {
-        const v = numOf(w.t);
-        if (v == null || v < lo || v > hi) continue;
+        // 숫자 포함 · 시간/페이스(: ' ")·진짜 소수(6.74) 제외 — "140."(bpm이 점으로 읽힘)은 허용
+        if (!/\d/.test(w.t) || /[:'’"]/.test(w.t) || /\d[.,]\d/.test(w.t)) continue;
         const dx = w.cx - anchor.cx, dy = w.cy - anchor.cy;
-        const above = dy < 0 && -dy <= H * 6 && Math.abs(dx) <= H * 8;      // 라벨 위
+        const above = dy < 0 && -dy <= H * 6 && Math.abs(dx) <= H * 8;       // 라벨 위
         const leftSame = Math.abs(dy) <= H * 1.8 && dx < 0 && -dx <= H * 14; // 같은 줄 왼쪽
         if (!above && !leftSame) continue;
         const d = Math.hypot(dx, dy);
-        if (d < bestD) { bestD = d; best = v; }
+        if (d < bestD) { bestD = d; best = w; }
       }
       return best;
     };
-    const res = {};
-    for (const w of W) {
-      if (res.hr == null && /심박|bpm/i.test(w.t)) { const v = valueNear(w, 40, 230); if (v != null) res.hr = v; }
-      if (res.cadence == null && /케이던|던스|이던|cadence|spm/i.test(w.t)) { const v = valueNear(w, 120, 260); if (v != null) res.cadence = v; }
+    async function pick(rx, lo, hi) {
+      for (const w of W) {
+        if (!rx.test(w.t)) continue;
+        const nw = wordNear(w);
+        if (!nw) continue;
+        const re = await readNumberAt(worker, img, nw.b, lo, hi); // 영역 재인식(정확)
+        if (re != null) return re;
+        const raw = numText(nw.t);                               // 전체 인식값(보조)
+        if (raw != null && raw >= lo && raw <= hi) return raw;
+      }
+      return null;
     }
+    const res = {};
+    res.hr = await pick(/심박|bpm/i, 40, 230);
+    res.cadence = await pick(/케이던|던스|이던|cadence|spm/i, 120, 260);
     return res;
   }
 
-  const shotEnough = r => r.distKm != null && (r.timeSec != null || r.paceSec != null);
+  // 거리·시간·페이스 중 둘만 있으면 나머지는 역산 가능 → 밴드 폴백 불필요
+  const shotEnough = r => ((r.distKm != null) + (r.timeSec != null) + (r.paceSec != null)) >= 2;
   async function ocrRunShot(worker, img) {
     // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
     await worker.setParameters({ tessedit_pageseg_mode: '3' });
@@ -759,21 +795,26 @@
       words: (data.words || []).map(w => `${w.text}@${Math.round((w.bbox.x0 + w.bbox.x1) / 2)},${Math.round((w.bbox.y0 + w.bbox.y1) / 2)}`),
     };
     let r = parseRunShot(data.text.replace(/\n/g, ' '));
-    // 심박/케이던스는 라벨 위치로 보강 (단위 없거나 한글 라벨인 요약 카드 대응)
-    const labeled = extractLabeledStats(data.words);
+    // 심박/케이던스는 라벨 위치 + 숫자 영역 재인식으로 보강 (단위 없거나 한글 라벨, 이탤릭 오인식 대응)
+    const labeled = await extractLabeledStats(worker, img, data.words);
     if (r.hr == null && labeled.hr != null) r.hr = labeled.hr;
     if (r.cadence == null && labeled.cadence != null) r.cadence = labeled.cadence;
     if (shotEnough(r)) return r;
 
     // 2차: 가로 밴드 (사진 위 오버레이 공유 카드 — 밝기 따라 자동 반전)
-    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    await worker.setParameters({ tessedit_pageseg_mode: '6', tessedit_char_whitelist: '' });
     const bands = [[0, 0.25], [0.18, 0.43], [0.36, 0.61], [0.54, 0.79], [0.72, 0.97], [0.88, 1]];
     let text = '';
     for (let i = 0; i < bands.length; i++) {
       text += ' ' + (await worker.recognize(shotBand(img, bands[i][0], bands[i][1]))).data.text.replace(/\n/g, ' ');
       $('csvStatus').textContent = `📷 인식 중… ${30 + Math.round((i + 1) / bands.length * 65)}%`;
     }
-    return parseRunShot(text);
+    // 밴드 결과는 whole-image r 의 빈 값만 채운다 (심박/케이던스 등 이미 얻은 값 보존)
+    const bandR = parseRunShot(text);
+    for (const k of ['distKm', 'timeSec', 'paceSec', 'hr', 'cadence']) {
+      if (r[k] == null && bandR[k] != null) r[k] = bandR[k];
+    }
+    return r;
   }
   function loadImageFile(file) {
     return new Promise((res, rej) => {
