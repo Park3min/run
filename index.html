@@ -675,10 +675,10 @@
       .filter(o => o.v > 0 && o.v < 100);
     if (dec.length) res.distKm = (dec.find(o => o.frac === 2) || dec[0]).v;
 
-    // 심박 / 케이던스
-    let h = text.match(/(\d{2,3})\s*(?:bpm|BPM)/) || text.match(/(?:심박|heart|hr)\D{0,6}(\d{2,3})/i);
+    // 심박 / 케이던스 — 단위(bpm/spm)로만 텍스트 인식 (한글 라벨 케이스는 bbox가 전담)
+    let h = text.match(/(\d{2,3})\s*(?:bpm|BPM)/);
     if (h) { const v = +h[1]; if (v >= 40 && v <= 230) res.hr = v; }
-    let cd = text.match(/(\d{2,3})\s*(?:spm|SPM)/) || text.match(/(?:케이던스|cadence)\D{0,6}(\d{2,3})/i);
+    let cd = text.match(/(\d{2,3})\s*(?:spm|SPM)/);
     if (cd) { const v = +cd[1]; if (v >= 120 && v <= 260) res.cadence = v; }
 
     return res; // 값 역산은 handleRunShot 에서 (밴드 병합 후)
@@ -708,12 +708,52 @@
     g.putImageData(id, 0, 0);
     return cv;
   }
+  // 단어 위치(bbox)로 라벨↔숫자 연결 → 심박/케이던스 추출.
+  // 요약 카드는 [숫자] 위, [라벨] 아래 배치 → 라벨 바로 위의 숫자를 그 지표로 본다.
+  // (단위(bpm)가 없거나 라벨이 한글이라 텍스트만으론 구분이 안 되는 경우를 커버)
+  function extractLabeledStats(words) {
+    const W = (words || []).map(w => ({
+      t: w.text || '',
+      cx: (w.bbox.x0 + w.bbox.x1) / 2,
+      cy: (w.bbox.y0 + w.bbox.y1) / 2,
+    }));
+    const numOf = t => {
+      if (/[:'’".]/.test(t)) return null;   // 시간/페이스/거리 제외
+      const m = t.match(/\d{2,3}/);
+      return m ? parseInt(m[0], 10) : null;
+    };
+    // 앵커(라벨) 바로 위에서 값 범위 안의 가장 가까운 숫자
+    const valueAbove = (anchor, lo, hi) => {
+      let best = null, bestDy = Infinity;
+      for (const w of W) {
+        const v = numOf(w.t);
+        if (v == null || v < lo || v > hi) continue;
+        const dy = anchor.cy - w.cy;               // 라벨보다 위(dy>0)
+        if (dy <= 0 || dy > 260) continue;
+        if (Math.abs(w.cx - anchor.cx) > 180) continue;
+        if (dy < bestDy) { bestDy = dy; best = v; }
+      }
+      return best;
+    };
+    const res = {};
+    for (const w of W) {
+      if (res.hr == null && /심박|bpm/i.test(w.t)) { const v = valueAbove(w, 40, 230); if (v != null) res.hr = v; }
+      if (res.cadence == null && /케이던|던스|이던|cadence|spm/i.test(w.t)) { const v = valueAbove(w, 120, 260); if (v != null) res.cadence = v; }
+    }
+    return res;
+  }
+
   const shotEnough = r => r.distKm != null && (r.timeSec != null || r.paceSec != null);
   async function ocrRunShot(worker, img) {
     // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
     await worker.setParameters({ tessedit_pageseg_mode: '3' });
     $('csvStatus').textContent = '📷 인식 중… 25%';
-    let r = parseRunShot((await worker.recognize(img)).data.text.replace(/\n/g, ' '));
+    const data = (await worker.recognize(img)).data;
+    let r = parseRunShot(data.text.replace(/\n/g, ' '));
+    // 심박/케이던스는 라벨 위치로 보강 (단위 없거나 한글 라벨인 요약 카드 대응)
+    const labeled = extractLabeledStats(data.words);
+    if (r.hr == null && labeled.hr != null) r.hr = labeled.hr;
+    if (r.cadence == null && labeled.cadence != null) r.cadence = labeled.cadence;
     if (shotEnough(r)) return r;
 
     // 2차: 가로 밴드 (사진 위 오버레이 공유 카드 — 밝기 따라 자동 반전)
@@ -741,7 +781,7 @@
     try {
       const T = await loadTesseract();
       const img = await loadImageFile(file);
-      worker = await T.createWorker('eng', 1);
+      worker = await T.createWorker('eng+kor', 1);
       // 전체 인식 → 부족하면 가로 밴드 인식으로 폴백
       const r = await ocrRunShot(worker, img);
 
