@@ -67,11 +67,113 @@
     padding: 10px 12px;
     outline: none;
   }
-  .field textarea { resize: vertical; min-height: 64px; font-size: 14px; }
+  .field textarea { resize: none; min-height: 72px; font-size: 14px; }
   .field input:focus, .field textarea:focus { border-color: var(--accent); }
   .field .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   input[type="date"] { color-scheme: dark; }
+
+  /* [1] 입력값 vs placeholder 대비 분리 — 값은 고대비 흰색+굵게, placeholder는 muted */
+  .field input, .field textarea { color: var(--ink); font-weight: 600; }
+  .field input::placeholder, .field textarea::placeholder {
+    color: var(--muted); font-weight: 400; opacity: 1;
+  }
+  .field input:placeholder-shown { font-weight: 400; }
+
+  /* 라인 아이콘 (Lucide) */
+  .icon {
+    width: 18px; height: 18px; flex: none;
+    stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; fill: none;
+  }
+  .icon-lg { width: 22px; height: 22px; }
+
+  /* [2] 자동 입력(가민·캡처) 강조 버튼 */
+  .import-actions { display: flex; flex-direction: column; gap: 10px; }
+  .import-btn {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    background: linear-gradient(180deg, rgba(200,245,66,0.10), rgba(200,245,66,0.04));
+    border: 1px solid rgba(200,245,66,0.45);
+    border-radius: 14px;
+    color: var(--ink);
+    font-family: var(--font); font-size: 15px; font-weight: 700;
+    padding: 14px 16px; cursor: pointer; text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
+  }
+  .import-btn:hover { border-color: var(--accent); background: rgba(200,245,66,0.14); }
+  .import-btn:active { transform: scale(0.99); }
+  .import-btn .ib-ico {
+    width: 38px; height: 38px; border-radius: 10px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: var(--accent-ink);
+  }
+  .import-btn .ib-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+
+  /* [4] 커스텀 date/time picker */
+  .field { position: relative; }
+  .picker-trigger {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--ink);
+    font-family: var(--font); font-size: 15px; font-weight: 600;
+    padding: 11px 12px; cursor: pointer; text-align: left;
+  }
+  .picker-trigger:hover, .picker-trigger.open { border-color: var(--accent); }
+  .picker-trigger.empty { color: var(--muted); font-weight: 400; }
+  .picker-trigger .icon { color: var(--muted); }
+  .picker-pop {
+    display: none;
+    position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; min-width: 100%;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+  }
+  .picker-pop.show { display: block; }
+  .pk-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .pk-title { font-size: 14px; font-weight: 700; }
+  .pk-nav {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--ink-2); width: 30px; height: 30px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .pk-nav:hover { border-color: var(--accent); color: var(--ink); }
+  .pk-grid { display: grid; grid-template-columns: repeat(7, 34px); gap: 3px; }
+  .pk-dow { font-size: 11px; color: var(--muted); text-align: center; padding: 4px 0; }
+  .pk-day {
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--ink-2); font-family: var(--font); font-size: 13px; font-weight: 600;
+    height: 32px; cursor: pointer;
+  }
+  .pk-day:hover { border-color: var(--border); color: var(--ink); }
+  .pk-day.dim { color: #55544f; }
+  .pk-day.today { border-color: var(--border); }
+  .pk-day.sel { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .pk-foot { display: flex; gap: 8px; margin-top: 10px; }
+  .pk-foot button {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--ink-2); font-family: var(--font); font-size: 12px; font-weight: 700;
+    padding: 8px; cursor: pointer;
+  }
+  .pk-foot button:hover { border-color: var(--accent); color: var(--ink); }
+  .pk-cols { display: flex; gap: 8px; }
+  .pk-col { flex: 1; }
+  .pk-col-label { font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 6px; }
+  .pk-list { max-height: 168px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding-right: 2px; }
+  .pk-list button {
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--ink-2); font-family: var(--font); font-size: 14px; font-weight: 600;
+    padding: 7px 14px; cursor: pointer; font-variant-numeric: tabular-nums;
+  }
+  .pk-list button:hover { border-color: var(--border); color: var(--ink); }
+  .pk-list button.sel { background: var(--accent); color: var(--accent-ink); }
+
+  /* [7] 결과 → 입력으로 돌아가기 */
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+    background: none; border: none; padding: 2px 0; cursor: pointer;
+    color: var(--muted); font-family: var(--font); font-size: 13px; font-weight: 600;
+  }
+  .back-link:hover { color: var(--accent); }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -99,9 +201,10 @@
   .hero .value { font-size: clamp(56px, 10vw, 88px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
   .hero .unit { font-size: 24px; font-weight: 700; color: var(--ink-2); margin-left: 6px; }
 
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  /* [8] flex 배치 — 숨김 항목이 있어도 자연스럽게 재배치, 페이스는 더 크게 */
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; }
   .tile {
+    flex: 1 1 130px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -110,6 +213,42 @@
   .tile .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   .tile .value { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
   .tile .value small { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+  /* 평균 페이스 — 러너 핵심 지표라 우선순위 강조 */
+  .tile[data-metric="pace"] {
+    flex: 1.7 1 190px;
+    border-color: rgba(200,245,66,0.45);
+    background: linear-gradient(180deg, rgba(200,245,66,0.07), rgba(200,245,66,0.02)), var(--surface);
+    padding: 18px 18px 20px;
+  }
+  .tile[data-metric="pace"] .label { color: var(--accent); font-weight: 700; }
+  .tile[data-metric="pace"] .value { font-size: 38px; letter-spacing: -0.02em; }
+  .tile[data-metric="pace"] .value small { font-size: 15px; }
+  @media (max-width: 640px) {
+    /* 2×2 유지 + 페이스를 첫 칸으로 (크기 대신 위치·스타일로 우선순위) */
+    .tile { flex: 1 1 calc(50% - 6px); }
+    .tile[data-metric="pace"] { flex: 1 1 calc(50% - 6px); order: -1; }
+    .tile[data-metric="pace"] .value { font-size: 32px; }
+  }
+
+  /* [3] 내보내기 탭 */
+  .export-card { margin-top: 20px; }
+  .export-tabs { display: flex; width: 100%; margin-bottom: 16px; }
+  .export-tabs button {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    background: none; border: none; color: var(--muted);
+    font-family: var(--font); font-size: 13px; font-weight: 700;
+    padding: 11px 8px; cursor: pointer;
+  }
+  .export-tabs button.on { background: var(--accent); color: var(--accent-ink); }
+  .export-panel { display: none; }
+  .export-panel.show { display: block; }
+  .panel-desc { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin-bottom: 14px; }
+  .panel-desc .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .export-tabs button { white-space: nowrap; }
+  @media (max-width: 480px) {
+    .export-tabs button { font-size: 11px; padding: 11px 2px; letter-spacing: -0.02em; }
+    .export-tabs button .icon { display: none; }
+  }
 
   /* ---- splits ---- */
   .splits { display: none; }
@@ -129,7 +268,6 @@
   .sp-pace { font-size: 14px; font-weight: 700; text-align: right; }
 
   /* ---- photo card ---- */
-  .photo-card { margin-top: 20px; }
   .drop {
     border: 2px dashed var(--border);
     border-radius: 14px;
@@ -311,8 +449,36 @@
     <div class="card">
       <div class="card-head">
         <h2>기록 입력</h2>
-        <button type="button" id="btnReset" class="reset-btn">↺ 초기화</button>
+        <button type="button" id="btnReset" class="reset-btn">
+          <svg class="icon" style="width:13px;height:13px;vertical-align:-2px" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          초기화
+        </button>
       </div>
+
+      <!-- [2] 자동 입력 — 핵심 기능이라 최상단에 강조 배치 -->
+      <div class="field">
+        <div class="import-actions">
+          <button class="import-btn" id="btnGarmin" type="button">
+            <span class="ib-ico">
+              <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><polyline points="12 10 12 12 13 13"/><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"/><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/></svg>
+            </span>
+            <span>가민 커넥트에서 가져오기
+              <span class="ib-sub">최근 활동을 그대로 불러옵니다</span>
+            </span>
+          </button>
+          <button class="import-btn" id="btnShot" type="button">
+            <span class="ib-ico">
+              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            </span>
+            <span>러닝 앱 캡처 인식
+              <span class="ib-sub">나이키·삼성 헬스·가민 결과 화면 스크린샷</span>
+            </span>
+          </button>
+        </div>
+        <input type="file" id="shotInput" accept="image/*" hidden>
+        <div class="hint" id="csvStatus">두 방법 중 하나로 기록을 자동으로 채우거나, 아래에 직접 입력하세요</div>
+      </div>
+
       <div class="field">
         <label for="inDist">총 거리 (km)</label>
         <input id="inDist" type="number" step="0.01" min="0" inputmode="decimal" placeholder="예: 5.24" value="5.24">
@@ -336,26 +502,58 @@
         <label for="inTitle">러닝 제목 (선택)</label>
         <input id="inTitle" type="text" placeholder="예: 한강 아침 러닝">
       </div>
+      <!-- [4] 커스텀 date/time picker (네이티브 input 은 값 저장용으로 숨김 유지) -->
       <div class="row2">
         <div class="field">
-          <label for="inDate">날짜</label>
-          <input id="inDate" type="date">
+          <label>날짜</label>
+          <button type="button" class="picker-trigger" id="dateTrigger" aria-haspopup="dialog">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+            <span id="dateLabel">날짜 선택</span>
+          </button>
+          <input id="inDate" type="date" hidden>
+          <div class="picker-pop" id="datePop" role="dialog">
+            <div class="pk-head">
+              <button type="button" class="pk-nav" id="pkPrev" aria-label="이전 달"><svg class="icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+              <span class="pk-title" id="pkTitle"></span>
+              <button type="button" class="pk-nav" id="pkNext" aria-label="다음 달"><svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+            </div>
+            <div class="pk-grid" id="pkDow"></div>
+            <div class="pk-grid" id="pkDays"></div>
+            <div class="pk-foot">
+              <button type="button" id="pkToday">오늘</button>
+              <button type="button" id="pkClearDate">지우기</button>
+            </div>
+          </div>
         </div>
         <div class="field">
-          <label for="inStartTime">시작 시각 (선택)</label>
-          <input id="inStartTime" type="time">
+          <label>시작 시각 (선택)</label>
+          <button type="button" class="picker-trigger empty" id="timeTrigger" aria-haspopup="dialog">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="timeLabel">시각 선택</span>
+          </button>
+          <input id="inStartTime" type="time" hidden>
+          <div class="picker-pop" id="timePop" role="dialog">
+            <div class="pk-cols">
+              <div class="pk-col">
+                <div class="pk-col-label">시</div>
+                <div class="pk-list" id="pkHours"></div>
+              </div>
+              <div class="pk-col">
+                <div class="pk-col-label">분</div>
+                <div class="pk-list" id="pkMinutes"></div>
+              </div>
+            </div>
+            <div class="pk-foot">
+              <button type="button" id="pkNow">지금</button>
+              <button type="button" id="pkClearTime">지우기</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="field">
         <label for="inSplits">구간 기록 — 1km 페이스 (선택)</label>
         <textarea id="inSplits" placeholder="한 줄에 하나씩&#10;5:50&#10;5:42&#10;5:38"></textarea>
         <div class="hint">분:초 형식, 줄바꿈 또는 쉼표로 구분</div>
-      </div>
-      <div class="field">
-        <button class="btn secondary" id="btnGarmin" type="button">⌚ 가민 커넥트에서 가져오기</button>
-        <button class="btn secondary" id="btnShot" type="button" style="margin-top:8px">📷 러닝 앱 캡처 인식</button>
-        <input type="file" id="shotInput" accept="image/*" hidden>
-        <div class="hint" id="csvStatus">가민 커넥트 연동, 또는 나이키·삼성 헬스·가민 등 러닝 앱 결과 화면 스크린샷으로 기록을 자동으로 채웁니다</div>
       </div>
       <div class="field">
         <label>표시 항목 (사진·영상에 표시)</label>
@@ -371,6 +569,11 @@
 
     <!-- 스탯 -->
     <div class="stats">
+      <!-- [7] 입력 화면으로 돌아가기 -->
+      <button type="button" class="back-link" id="btnEdit">
+        <svg class="icon" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+        수정하기
+      </button>
       <div class="hero">
         <div class="label">총 거리</div>
         <div class="value"><span id="stDist">0.00</span><span class="unit">km</span></div>
@@ -397,14 +600,53 @@
         <h2>구간 기록</h2>
         <div id="splitsView"></div>
       </div>
-      <button class="btn secondary" id="btnStatsPng">🎞️ 기록만 투명 PNG로 저장 (사진 없이)</button>
-      <button class="btn secondary" id="btnCapture">▶ 영상 캡처 모드 — 빈 배경에서 카운트업만 재생</button>
     </div>
   </div>
 
-  <!-- 사진 -->
-  <div class="card photo-card">
-    <h2>사진에 기록 새기기</h2>
+  <!-- [3] 내보내기 — 세 옵션을 탭으로 -->
+  <div class="card export-card">
+    <div class="card-head">
+      <h2>내보내기</h2>
+    </div>
+    <div class="seg export-tabs" id="exportTabs">
+      <button type="button" data-tab="photo" class="on">
+        <svg class="icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+        사진에 워터마크
+      </button>
+      <button type="button" data-tab="png">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        투명 PNG
+      </button>
+      <button type="button" data-tab="video">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        영상 캡처
+      </button>
+    </div>
+
+    <!-- 투명 PNG 패널 -->
+    <div class="export-panel" id="panelPng">
+      <div class="panel-desc">사진 없이 기록만 투명 배경 PNG로 저장합니다.
+        <span class="sub">다른 이미지나 영상 위에 자유롭게 얹을 수 있어요 · 내용에 맞게 자동으로 잘립니다</span>
+      </div>
+      <button class="btn" id="btnStatsPng">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        투명 PNG 저장
+      </button>
+    </div>
+
+    <!-- 영상 캡처 패널 -->
+    <div class="export-panel" id="panelVideo">
+      <div class="panel-desc">빈 배경에서 카운트업 애니메이션만 재생합니다.
+        <span class="sub">검정·크로마키·흰색 배경 선택 · 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요</span>
+      </div>
+      <button class="btn" id="btnCapture">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        영상 캡처 모드 열기
+      </button>
+    </div>
+
+    <!-- 사진 워터마크 패널 (기본) -->
+    <div class="export-panel show" id="panelPhoto">
     <div class="drop" id="dropZone">
       <strong>사진을 끌어다 놓거나 클릭해서 선택</strong><br>
       기록이 워터마크처럼 사진 위에 새겨집니다
@@ -412,7 +654,10 @@
     <input type="file" id="fileInput" accept="image/*" hidden>
     <div class="canvas-wrap" id="canvasWrap">
       <canvas id="photoCanvas"></canvas>
-      <div class="drag-hint">💡 사진 위의 기록 블록을 드래그하면 원하는 위치로 옮길 수 있어요.</div>
+      <div class="drag-hint">
+        <svg class="icon" style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/></svg>
+        사진 위의 기록 블록을 드래그하면 원하는 위치로 옮길 수 있어요.
+      </div>
       <div class="photo-controls">
         <span class="seg" id="styleSeg">
           <button data-style="gradient" class="on">그라데이션</button>
@@ -438,10 +683,20 @@
         <button class="btn secondary" id="btnResetPos">위치 초기화</button>
       </div>
       <div class="photo-controls">
-        <button class="btn" id="btnSave">이미지 저장</button>
-        <button class="btn" id="btnStory">스토리 저장 (9:16)</button>
-        <button class="btn secondary" id="btnOther">다른 사진</button>
+        <button class="btn" id="btnSave">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          이미지 저장
+        </button>
+        <button class="btn" id="btnStory">
+          <svg class="icon" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>
+          스토리 저장 (9:16)
+        </button>
+        <button class="btn secondary" id="btnOther">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          다른 사진
+        </button>
       </div>
+    </div>
     </div>
   </div>
 </div>
@@ -500,14 +755,17 @@
     <div class="cap-dist"><span id="capDist">0.00</span><span class="unit">km</span></div>
     <div class="cap-row" id="capRow"></div>
   </div>
-  <button class="cap-start" id="capStart">▶ 시작</button>
+  <button class="cap-start" id="capStart">
+    <svg class="icon" style="width:24px;height:24px;vertical-align:-5px;margin-right:6px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+    시작
+  </button>
   <button class="cap-reset hidden" id="capReset" title="0으로 초기화" aria-label="0으로 초기화">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"></path>
       <polyline points="20.5 4.2 20.5 9.2 15.5 9.2"></polyline>
     </svg>
   </button>
-  <div class="cap-hint" id="capHint">먼저 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요</div>
+  <div class="cap-hint" id="capHint">먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요</div>
 </div>
 
 <script src="garmin-web.js"></script>
@@ -637,6 +895,7 @@
     state.title = $('inTitle').value.trim();
     state.date = $('inDate').value;
     state.startTime = $('inStartTime').value;
+    syncPickerLabels();
     state.splits = parseSplits($('inSplits').value);
     if (state.lapLabels && state.lapLabels.length !== state.splits.length) state.lapLabels = null;
 
@@ -658,6 +917,7 @@
     ['inDist', 'inTime', 'inCad', 'inHr', 'inTitle', 'inSplits', 'inStartTime'].forEach(id => { $(id).value = ''; });
     $('inDate').value = todayISO();
     state.lapLabels = null;
+    syncPickerLabels();
   }
   // 입력·표시·상태 전체 초기화 (초기화 버튼)
   function resetRecord() {
@@ -834,7 +1094,7 @@
   async function ocrRunShot(worker, img) {
     // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
     await worker.setParameters({ tessedit_pageseg_mode: '3' });
-    $('csvStatus').textContent = '📷 인식 중… 25%';
+    $('csvStatus').textContent = '인식 중… 25%';
     const data = (await worker.recognize(img)).data;
     window.__lastOCR = { // 진단용: ?debug 로 화면에 표시
       text: data.text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim(),
@@ -853,7 +1113,7 @@
     let text = '';
     for (let i = 0; i < bands.length; i++) {
       text += ' ' + (await worker.recognize(shotBand(img, bands[i][0], bands[i][1]))).data.text.replace(/\n/g, ' ');
-      $('csvStatus').textContent = `📷 인식 중… ${30 + Math.round((i + 1) / bands.length * 65)}%`;
+      $('csvStatus').textContent = `인식 중… ${30 + Math.round((i + 1) / bands.length * 65)}%`;
     }
     // 밴드 결과는 whole-image r 의 빈 값만 채운다 (심박/케이던스 등 이미 얻은 값 보존)
     const bandR = parseRunShot(text);
@@ -872,7 +1132,7 @@
   }
 
   async function handleRunShot(file) {
-    $('csvStatus').textContent = '📷 스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)';
+    $('csvStatus').textContent = '스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)';
     let worker;
     try {
       const T = await loadTesseract();
@@ -1154,7 +1414,132 @@
     document.querySelectorAll('#tiles .tile').forEach(t => {
       t.style.display = state.metrics.includes(t.dataset.metric) ? '' : 'none';
     });
+    syncPickerLabels();
   }
+
+  // ---------- [4] 커스텀 date / time picker (네이티브 input 은 값 저장용) ----------
+  const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+  let pkView = null;                    // 보고 있는 달 {y, m}
+  const reapplyIfShown = () => { if (state.dist > 0) applyRecord(); };
+
+  function syncPickerLabels() {
+    const dv = $('inDate').value, tv = $('inStartTime').value;
+    $('dateLabel').textContent = dv ? fmtDate(dv) : '날짜 선택';
+    $('dateTrigger').classList.toggle('empty', !dv);
+    $('timeLabel').textContent = tv || '시각 선택';
+    $('timeTrigger').classList.toggle('empty', !tv);
+  }
+  function closePickers() {
+    ['datePop', 'timePop'].forEach(id => $(id).classList.remove('show'));
+    ['dateTrigger', 'timeTrigger'].forEach(id => $(id).classList.remove('open'));
+  }
+
+  function renderCalendar() {
+    const v = $('inDate').value;
+    const sel = v ? { y: +v.slice(0, 4), m: +v.slice(5, 7) - 1, d: +v.slice(8, 10) } : null;
+    if (!pkView) {
+      const n = new Date();
+      pkView = sel ? { y: sel.y, m: sel.m } : { y: n.getFullYear(), m: n.getMonth() };
+    }
+    $('pkTitle').textContent = `${pkView.y}년 ${pkView.m + 1}월`;
+    if (!$('pkDow').childElementCount)
+      $('pkDow').innerHTML = WEEK.map(w => `<div class="pk-dow">${w}</div>`).join('');
+
+    const startDow = new Date(pkView.y, pkView.m, 1).getDay();
+    const daysInMonth = new Date(pkView.y, pkView.m + 1, 0).getDate();
+    const prevDays = new Date(pkView.y, pkView.m, 0).getDate();
+    const today = todayISO();
+    const cells = [];
+    for (let i = startDow - 1; i >= 0; i--) cells.push({ d: prevDays - i, dim: true });
+    for (let d = 1; d <= daysInMonth; d++) cells.push({ d, dim: false });
+    let nextD = 1;
+    while (cells.length % 7) cells.push({ d: nextD++, dim: true });
+
+    $('pkDays').innerHTML = cells.map(c => {
+      if (c.dim) return `<button type="button" class="pk-day dim" disabled>${c.d}</button>`;
+      const iso = `${pkView.y}-${String(pkView.m + 1).padStart(2, '0')}-${String(c.d).padStart(2, '0')}`;
+      const cls = ['pk-day'];
+      if (iso === today) cls.push('today');
+      if (sel && sel.y === pkView.y && sel.m === pkView.m && sel.d === c.d) cls.push('sel');
+      return `<button type="button" class="${cls.join(' ')}" data-iso="${iso}">${c.d}</button>`;
+    }).join('');
+  }
+
+  function renderTimePicker() {
+    const tv = $('inStartTime').value;
+    const [hh, mm] = tv ? tv.split(':') : [null, null];
+    const list = (n, attr, cur) => Array.from({ length: n }, (_, i) => {
+      const s = String(i).padStart(2, '0');
+      return `<button type="button" ${attr}="${s}" class="${s === cur ? 'sel' : ''}">${s}</button>`;
+    }).join('');
+    $('pkHours').innerHTML = list(24, 'data-h', hh);
+    $('pkMinutes').innerHTML = list(60, 'data-m', mm);
+    // 선택된 값이 보이도록 목록 스크롤 (페이지는 움직이지 않게 scrollTop 직접 조정)
+    ['pkHours', 'pkMinutes'].forEach(id => {
+      const box = $(id), el = box.querySelector('.sel');
+      if (el) box.scrollTop = el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2;
+    });
+  }
+
+  $('dateTrigger').addEventListener('click', e => {
+    e.stopPropagation();
+    const open = $('datePop').classList.contains('show');
+    closePickers();
+    if (!open) { pkView = null; renderCalendar(); $('datePop').classList.add('show'); $('dateTrigger').classList.add('open'); }
+  });
+  $('timeTrigger').addEventListener('click', e => {
+    e.stopPropagation();
+    const open = $('timePop').classList.contains('show');
+    closePickers();
+    if (!open) { renderTimePicker(); $('timePop').classList.add('show'); $('timeTrigger').classList.add('open'); }
+  });
+  $('pkPrev').addEventListener('click', () => { if (--pkView.m < 0) { pkView.m = 11; pkView.y--; } renderCalendar(); });
+  $('pkNext').addEventListener('click', () => { if (++pkView.m > 11) { pkView.m = 0; pkView.y++; } renderCalendar(); });
+  $('pkDays').addEventListener('click', e => {
+    const b = e.target.closest('button[data-iso]'); if (!b) return;
+    $('inDate').value = b.dataset.iso;
+    syncPickerLabels(); closePickers(); reapplyIfShown();
+  });
+  $('pkToday').addEventListener('click', () => {
+    $('inDate').value = todayISO(); syncPickerLabels(); closePickers(); reapplyIfShown();
+  });
+  $('pkClearDate').addEventListener('click', () => {
+    $('inDate').value = ''; syncPickerLabels(); closePickers(); reapplyIfShown();
+  });
+  $('timePop').addEventListener('click', e => {
+    const b = e.target.closest('button[data-h], button[data-m]'); if (!b) return;
+    const cur = $('inStartTime').value || '00:00';
+    let [h, m] = cur.split(':');
+    if (b.dataset.h !== undefined) h = b.dataset.h; else m = b.dataset.m;
+    $('inStartTime').value = `${h}:${m}`;
+    renderTimePicker(); syncPickerLabels(); reapplyIfShown();
+  });
+  $('pkNow').addEventListener('click', () => {
+    const d = new Date();
+    $('inStartTime').value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    syncPickerLabels(); closePickers(); reapplyIfShown();
+  });
+  $('pkClearTime').addEventListener('click', () => {
+    $('inStartTime').value = ''; syncPickerLabels(); closePickers(); reapplyIfShown();
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.picker-pop') && !e.target.closest('.picker-trigger')) closePickers();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePickers(); });
+
+  // ---------- [3] 내보내기 탭 ----------
+  const EXPORT_PANELS = { photo: 'panelPhoto', png: 'panelPng', video: 'panelVideo' };
+  $('exportTabs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...$('exportTabs').children].forEach(x => x.classList.toggle('on', x === b));
+    Object.entries(EXPORT_PANELS).forEach(([k, id]) => $(id).classList.toggle('show', k === b.dataset.tab));
+  });
+
+  // ---------- [7] 수정하기 → 입력 폼으로 ----------
+  $('btnEdit').addEventListener('click', () => {
+    document.querySelector('.grid > .card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => { try { $('inDist').focus({ preventScroll: true }); } catch (e) { $('inDist').focus(); } }, 420);
+  });
   $('metricChips').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const k = b.dataset.metric;
@@ -1543,14 +1928,14 @@
     capBuildRow();
     $('capStart').classList.remove('hidden');
     $('capReset').classList.add('hidden');
-    $('capHint').textContent = '먼저 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요';
+    $('capHint').textContent = '먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요';
   }
   // 시작(또는 다시 재생): 카운트업 애니메이션 재생
   function capReplay() {
     capBuildRow();
     $('capStart').classList.add('hidden');
     $('capReset').classList.remove('hidden');
-    $('capHint').textContent = '화면을 클릭하면 다시 재생 · ↻ 를 누르면 0으로 초기화';
+    $('capHint').textContent = '화면을 클릭하면 다시 재생 · 아래 버튼으로 0으로 초기화';
     animateStats('cap');
   }
   function wakeControls() {
