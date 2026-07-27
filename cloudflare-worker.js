@@ -26,9 +26,11 @@ const ALLOWED_ORIGINS = new Set([
   "null", // file:// 로 연 로컬 앱
 ]);
 
-// 정적 목록 + 모든 *.vercel.app (프로덕션·프리뷰 배포) 허용
+// 정적 목록 + 모든 *.vercel.app (프로덕션·프리뷰 배포) + park3min.com 및 그 하위 도메인 허용
 function isAllowedOrigin(origin) {
-  return ALLOWED_ORIGINS.has(origin) || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
+  return ALLOWED_ORIGINS.has(origin)
+    || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)
+    || /^https:\/\/([a-z0-9-]+\.)*park3min\.com$/i.test(origin);
 }
 
 function corsHeaders(origin) {
