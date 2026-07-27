@@ -819,7 +819,9 @@
   const fmtDist = v => v.toFixed(2);
   function fmtPace(sec) {
     if (!isFinite(sec) || sec <= 0) return `0'00"`;
-    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    // 초를 먼저 반올림해야 6'60" 대신 7'00" 으로 올림된다 (예: 419.75초/km)
+    const t = Math.round(sec);
+    const m = Math.floor(t / 60), s = t % 60;
     return `${m}'${String(s).padStart(2, '0')}"`;
   }
   function fmtTime(sec) {
@@ -1224,7 +1226,8 @@
     return gw;
   };
   const paceToInput = sec => {
-    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    const t = Math.round(sec);                    // 60초로 표기되지 않도록 먼저 반올림
+    const m = Math.floor(t / 60), s = t % 60;
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
