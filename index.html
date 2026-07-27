@@ -270,6 +270,18 @@
     transition: opacity 0.4s ease;
   }
   .cap-hint.idle { opacity: 0; }
+  .cap-start {
+    position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
+    background: var(--accent); color: var(--accent-ink);
+    border: none; border-radius: 999px;
+    font-family: var(--font); font-size: clamp(18px, 3vw, 26px); font-weight: 800;
+    padding: 16px 44px; cursor: pointer; z-index: 2;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+    transition: transform 0.08s ease, filter 0.15s ease;
+  }
+  .cap-start:hover { filter: brightness(1.08); }
+  .cap-start:active { transform: translateX(-50%) scale(0.97); }
+  .cap-start.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -468,12 +480,13 @@
     <button class="btn" id="capReplay">다시 재생</button>
     <button class="btn secondary" id="capClose">닫기 (ESC)</button>
   </div>
-  <div class="cap-stage" id="capStage" title="클릭하면 다시 재생">
+  <div class="cap-stage" id="capStage" title="클릭하면 재생">
     <div class="cap-title" id="capTitle"></div>
     <div class="cap-dist"><span id="capDist">0.00</span><span class="unit">km</span></div>
     <div class="cap-row" id="capRow"></div>
   </div>
-  <div class="cap-hint" id="capHint">화면을 클릭하면 애니메이션이 다시 재생됩니다 · 이 상태에서 화면 녹화를 하세요</div>
+  <button class="cap-start" id="capStart">▶ 시작</button>
+  <div class="cap-hint" id="capHint">먼저 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요</div>
 </div>
 
 <script src="garmin-web.js"></script>
@@ -1486,20 +1499,29 @@
   const capHint = $('capHint');
   let idleTimer = null;
 
-  function capReplay() {
+  // 대기 화면: 제목·라벨은 그대로, 숫자는 0에서 멈춰 대기 (자동 재생 안 함)
+  function capBuildRow() {
     const titleText = [state.title, state.showDate ? fmtDateWhen() : null]
       .filter(Boolean).join('  ·  ');
     $('capTitle').textContent = titleText;
     $('capTitle').style.display = titleText ? '' : 'none';
+    $('capDist').textContent = '0.00';
+    const zero = { Time: fmtTime(0), Pace: fmtPace(0), Hr: '0', Cad: '0' };
     const row = $('capRow');
     row.innerHTML = '';
     selectedMetrics().forEach(k => {
       const d = METRIC_DEFS[k];
       const item = document.createElement('div');
       item.className = 'cap-item';
-      item.innerHTML = `<div class="label">${d.label}</div><div class="value" id="cap${d.idSuffix}">0</div>`;
+      item.innerHTML = `<div class="label">${d.label}</div><div class="value" id="cap${d.idSuffix}">${zero[d.idSuffix] || '0'}</div>`;
       row.appendChild(item);
     });
+  }
+  // 시작(또는 다시 재생): 카운트업 애니메이션 재생
+  function capReplay() {
+    capBuildRow();
+    $('capStart').classList.add('hidden');
+    $('capHint').textContent = '화면을 클릭하면 다시 재생됩니다';
     animateStats('cap');
   }
   function wakeControls() {
@@ -1514,14 +1536,17 @@
   $('btnCapture').addEventListener('click', () => {
     capOverlay.classList.add('show');
     wakeControls();
-    capReplay();
+    capBuildRow();                       // 0에서 대기 (자동 재생 안 함)
+    $('capStart').classList.remove('hidden');
+    $('capHint').textContent = '먼저 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요';
   });
+  $('capStart').addEventListener('click', capReplay);
   $('capClose').addEventListener('click', () => capOverlay.classList.remove('show'));
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') capOverlay.classList.remove('show');
   });
   $('capReplay').addEventListener('click', capReplay);
-  $('capStage').addEventListener('click', capReplay);
+  $('capStage').addEventListener('click', () => { if (!$('capStart').classList.contains('hidden')) return; capReplay(); });
   capOverlay.addEventListener('pointermove', () => {
     if (capOverlay.classList.contains('show')) wakeControls();
   });
