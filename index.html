@@ -29,8 +29,16 @@
   .wrap { max-width: 960px; margin: 0 auto; }
 
   header { margin-bottom: 28px; }
-  header h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+  header h1 {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.02em;
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+  }
   header h1 .dot { color: var(--accent); }
+  header h1 .by {
+    font-size: 12px; font-weight: 600; letter-spacing: 0;
+    color: var(--muted);
+  }
+  header h1 .by .handle { color: var(--ink-2); }
   header p { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
   .grid {
@@ -440,7 +448,10 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>러닝로그<span class="dot">.</span></h1>
+    <h1>
+      <span class="name">러닝로그<span class="dot">.</span></span>
+      <span class="by">by 빠르크 <span class="handle">@pki_runner</span></span>
+    </h1>
     <p>러닝 기록을 입력하면 카운트업 애니메이션으로 표시하고, 사진 위에 기록을 얹어 저장할 수 있어요.</p>
   </header>
 
