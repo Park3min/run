@@ -175,6 +175,18 @@
   .pk-list button:hover { border-color: var(--border); color: var(--ink); }
   .pk-list button.sel { background: var(--accent); color: var(--accent-ink); }
 
+  /* 방문자 카운터 */
+  .site-foot {
+    margin-top: 28px; padding-top: 18px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+  .site-foot .visits {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--muted); font-size: 12px; font-weight: 500;
+  }
+  .site-foot .visits b { color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+
   /* [7] 결과 → 입력으로 돌아가기 */
   .back-link {
     display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
@@ -710,6 +722,13 @@
     </div>
     </div>
   </div>
+
+  <footer class="site-foot">
+    <span class="visits" id="visitBox" hidden>
+      <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+      오늘 <b id="visitToday">–</b> · 전체 <b id="visitTotal">–</b>
+    </span>
+  </footer>
 </div>
 
 <!-- 가민 활동 선택 -->
@@ -1985,9 +2004,35 @@
     [...$('capBgSeg').children].forEach(x => x.classList.toggle('on', x === b));
   });
 
+  // ---------- 방문자 카운터 ----------
+  // 브라우저마다 난수 id 를 하나 만들어 두고, 같은 사람이 하루에 여러 번 와도 한 번만 집계.
+  // id 는 개인정보와 무관한 난수이며 이 브라우저에만 저장된다.
+  function visitorId() {
+    let v = localStorage.getItem('runlogVid');
+    if (!v) {
+      v = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random())
+        .replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+      localStorage.setItem('runlogVid', v);
+    }
+    return v;
+  }
+  async function loadVisits() {
+    if (!proxyReady) return;
+    try {
+      const r = await fetch(`${GARMIN_PROXY}/count?vid=${encodeURIComponent(visitorId())}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (typeof d.total !== 'number') return;
+      $('visitToday').textContent = d.today.toLocaleString('ko-KR');
+      $('visitTotal').textContent = d.total.toLocaleString('ko-KR');
+      $('visitBox').hidden = false;
+    } catch (e) { /* 카운터는 부가 기능이라 실패해도 앱 동작에 영향 없음 */ }
+  }
+
   // ---------- init ----------
   restoreSettings();
   applyRecord();
+  loadVisits();
 })();
 </script>
 </body>

@@ -43,14 +43,70 @@ function corsHeaders(origin) {
   };
 }
 
+// 한국 시간(UTC+9) 기준 오늘 날짜 YYYY-MM-DD
+function todayKST() {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * 방문자 카운터 — /count?vid=<방문자 고유 id>
+ * 같은 방문자는 하루에 한 번만 집계 (총 방문자는 평생 한 번).
+ * vid 는 각 브라우저에서 만든 난수이며 개인정보와 무관하다.
+ */
+async function handleCount(request, env, origin) {
+  const headers = { ...corsHeaders(origin), "Content-Type": "application/json", "Cache-Control": "no-store" };
+  if (!env || !env.COUNTER) {
+    return new Response(JSON.stringify({ error: "counter unavailable" }), { status: 503, headers });
+  }
+  const url = new URL(request.url);
+  const vid = (url.searchParams.get("vid") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+  const day = todayKST();
+  const dayKey = `day:${day}`;
+
+  let [totalRaw, dayRaw] = await Promise.all([
+    env.COUNTER.get("total"),
+    env.COUNTER.get(dayKey),
+  ]);
+  let total = parseInt(totalRaw || "0", 10) || 0;
+  let today = parseInt(dayRaw || "0", 10) || 0;
+
+  if (vid) {
+    const seenTotalKey = `seen:${vid}`;
+    const seenDayKey = `seen:${day}:${vid}`;
+    const [seenTotal, seenDay] = await Promise.all([
+      env.COUNTER.get(seenTotalKey),
+      env.COUNTER.get(seenDayKey),
+    ]);
+    const writes = [];
+    if (!seenTotal) {
+      total += 1;
+      writes.push(env.COUNTER.put("total", String(total)));
+      writes.push(env.COUNTER.put(seenTotalKey, "1"));
+    }
+    if (!seenDay) {
+      today += 1;
+      writes.push(env.COUNTER.put(dayKey, String(today)));
+      // 방문 기록은 이틀 뒤 자동 삭제 (저장소를 깨끗하게 유지)
+      writes.push(env.COUNTER.put(seenDayKey, "1", { expirationTtl: 172800 }));
+    }
+    if (writes.length) await Promise.all(writes);
+  }
+
+  return new Response(JSON.stringify({ today, total, date: day }), { headers });
+}
+
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
     const url = new URL(request.url);
+    if (url.pathname === "/count") {
+      return handleCount(request, env, origin);
+    }
+
     const m = url.pathname.match(/^\/p\/([^/]+)(\/.*)$/);
     if (!m) {
       return new Response(JSON.stringify({ error: "usage: /p/<host>/<path>" }), {
