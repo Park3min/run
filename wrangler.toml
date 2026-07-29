@@ -2,3 +2,8 @@ name = "garmin-proxy"
 main = "cloudflare-worker.js"
 compatibility_date = "2026-07-01"
 workers_dev = true
+
+# 방문자 카운터 저장소
+[[kv_namespaces]]
+binding = "COUNTER"
+id = "dd51ef89f5254da9aabfaf17c041f873"
