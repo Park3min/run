@@ -1134,8 +1134,10 @@
 
     // 거리 기준 단위 = '값' 글자 높이의 중앙값.
     // 라벨 bbox 높이는 2줄 라벨·흐린 회색 글씨에서 들쭉날쭉해(예: '심박수' h=15) 기준으로 쓸 수 없다.
+    // 중앙값이 아니라 상위 75% 지점을 쓴다 — 지도 pill·상태바처럼 작은 숫자가 많으면
+    // 중앙값이 끌려 내려가 정작 큰 스탯 값이 기준에서 벗어난다.
     const numH = W.filter(isNum).map(w => w.h).sort((a, b) => a - b);
-    const unit = numH.length ? numH[Math.floor(numH.length / 2)] : 24;
+    const unit = numH.length ? numH[Math.min(numH.length - 1, Math.floor(numH.length * 0.75))] : 24;
 
     // 라벨(앵커) 주변에서 값 후보를 찾는다. 앱별 배치(값이 라벨 위/아래)를 우선하되 반대쪽도 허용.
     const wordNear = anchor => {
@@ -1171,17 +1173,19 @@
     // 한글 라벨이 아예 인식되지 않는 경우가 잦아(회색 작은 글씨) 레이아웃으로 보조 추정.
     // NRC 는 히어로 거리 아래에 3열 격자가 오고, 두 번째 줄이 [고도, 평균 심박, 케이던스] 다.
     if (cfg.grid && (res.hr == null || res.cadence == null)) {
-      const nums = W.filter(w => isNum(w) && /^\d{1,3}$/.test(w.t.replace(/\D/g, '')) &&
-        Math.abs(w.h - unit) <= unit * 0.45);
-      const hero = W.reduce((a, w) => (w.h > (a ? a.h : 0) ? w : a), null);   // 가장 큰 글씨 = 거리
-      const top = hero ? hero.b.y1 : 0;
-      const bottom = top + unit * 14;                                          // 지도·그래프 영역 제외
+      // 히어로 거리는 큰 이탤릭이라 빈 단어로 읽히는 일이 있어 기준점으로 쓰지 않는다.
+      // 숫자를 y 로 묶어 행을 만든 뒤, 3열 이상인 행 중 '글자가 큰' 행만 스탯 격자로 본다
+      // (지도 위 '1 km' 같은 작은 라벨도 행을 이루지만 글자가 작아 걸러진다).
+      const nums = W.filter(w => isNum(w) && /^\d{1,3}$/.test(w.t.replace(/\D/g, '')));
       const rows = [];
-      nums.filter(w => w.cy > top && w.cy < bottom).sort((a, b) => a.cy - b.cy).forEach(w => {
-        const r = rows.find(r => Math.abs(r.y - w.cy) <= unit * 0.7);
-        if (r) r.items.push(w); else rows.push({ y: w.cy, items: [w] });
+      nums.slice().sort((a, b) => a.cy - b.cy).forEach(w => {
+        const r = rows.find(r => Math.abs(r.y - w.cy) <= Math.max(w.h, r.h) * 0.7);
+        if (r) { r.items.push(w); r.h = Math.max(r.h, w.h); }
+        else rows.push({ y: w.cy, h: w.h, items: [w] });
       });
-      const grid = rows.filter(r => r.items.length >= 3);
+      const cands = rows.filter(r => r.items.length >= 3);
+      const maxH = cands.length ? Math.max(...cands.map(r => r.h)) : 0;
+      const grid = cands.filter(r => r.h >= maxH * 0.8);
       if (grid.length) {
         const cols = grid[grid.length - 1].items.slice().sort((a, b) => a.cx - b.cx);
         const at = async (i, lo, hi) => {
@@ -1198,8 +1202,10 @@
     return res;
   }
 
-  // 거리·시간·페이스 중 둘만 있으면 나머지는 역산 가능 → 밴드 폴백 불필요
-  const shotEnough = r => ((r.distKm != null) + (r.timeSec != null) + (r.paceSec != null)) >= 2;
+  // 거리를 실제로 읽었고 시간·페이스 중 하나가 있으면 충분. 거리를 못 읽었으면
+  // 밴드 인식을 한 번 더 시도한다 (큰 이탤릭 히어로 숫자가 통째로 안 읽히는 경우 대비 —
+  // 역산한 거리는 5.10 이 5.11 로 어긋날 수 있어 실제 값을 우선한다).
+  const shotEnough = r => r.distKm != null && (r.timeSec != null || r.paceSec != null);
   async function ocrRunShot(worker, img, app) {
     // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
     await worker.setParameters({ tessedit_pageseg_mode: '3' });
