@@ -117,6 +117,28 @@
   }
   .import-btn .ib-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 2px; }
 
+  /* 앱별 캡처 인식 버튼 (가민 아래, 3개 나란히) */
+  .shot-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    margin: 14px 0 8px;
+  }
+  .shot-apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .shot-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--ink);
+    font-family: var(--font); padding: 12px 6px; cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
+  }
+  .shot-btn:hover { border-color: var(--accent); background: rgba(200,245,66,0.07); }
+  .shot-btn:active { transform: scale(0.98); }
+  .shot-btn .sb-name { font-size: 12.5px; font-weight: 700; line-height: 1.25; text-align: center; }
+  .shot-btn .sb-sub { font-size: 10px; font-weight: 500; color: var(--muted); }
+  @media (max-width: 380px) {
+    .shot-btn .sb-name { font-size: 11px; }
+  }
+
   /* [4] 커스텀 date/time picker */
   .field { position: relative; }
   .picker-trigger {
@@ -489,17 +511,29 @@
               <span class="ib-sub">최근 활동을 그대로 불러옵니다</span>
             </span>
           </button>
-          <button class="import-btn" id="btnShot" type="button">
-            <span class="ib-ico">
-              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-            </span>
-            <span>러닝 앱 캡처 인식
-              <span class="ib-sub">나이키·삼성 헬스·가민 결과 화면 스크린샷</span>
-            </span>
+        </div>
+
+        <!-- 앱별 캡처 인식 — 어느 앱인지 알려주면 그 앱 화면 구성에 맞춰 더 정확히 읽습니다 -->
+        <div class="shot-label">
+          <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          캡처 인식 — 어떤 앱인가요?
+        </div>
+        <div class="shot-apps">
+          <button class="shot-btn" type="button" data-shot-app="nrc">
+            <span class="sb-name">Nike Run Club</span>
+            <span class="sb-sub">NRC</span>
+          </button>
+          <button class="shot-btn" type="button" data-shot-app="samsung">
+            <span class="sb-name">삼성 헬스</span>
+            <span class="sb-sub">Samsung</span>
+          </button>
+          <button class="shot-btn" type="button" data-shot-app="apple">
+            <span class="sb-name">애플 피트니스</span>
+            <span class="sb-sub">Fitness</span>
           </button>
         </div>
         <input type="file" id="shotInput" accept="image/*" hidden>
-        <div class="hint" id="csvStatus">두 방법 중 하나로 기록을 자동으로 채우거나, 아래에 직접 입력하세요</div>
+        <div class="hint" id="csvStatus">가민 연동하거나 러닝 앱 스크린샷으로 자동으로 채우고, 아래에서 확인·수정하세요</div>
       </div>
 
       <div class="field">
@@ -1046,9 +1080,17 @@
     g.putImageData(id, 0, 0);
     return cv;
   }
-  // 단어 위치(bbox)로 라벨↔숫자 연결 → 심박/케이던스 추출.
-  // 요약 카드는 [숫자] 위, [라벨] 아래 배치 → 라벨 바로 위의 숫자를 그 지표로 본다.
-  // (단위(bpm)가 없거나 라벨이 한글이라 텍스트만으론 구분이 안 되는 경우를 커버)
+  // 러닝 앱별 결과 화면 특성.
+  //  valueDir : 라벨 기준 값의 위치 — 나이키·삼성은 [값] 위 / [라벨] 아래, 애플은 [라벨] 위 / [값] 아래
+  //  hr/cadence : 그 앱이 쓰는 라벨(또는 단위) 패턴
+  const SHOT_APPS = {
+    // grid: 라벨을 못 읽었을 때 쓸 격자 열 번호 (NRC 두 번째 줄 = 고도0 · 심박1 · 케이던스2)
+    nrc:     { name: '나이키 런 클럽', valueDir: 'above', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i, grid: { hr: 1, cadence: 2 } },
+    samsung: { name: '삼성 헬스',     valueDir: 'above', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i },
+    apple:   { name: '애플 피트니스', valueDir: 'below', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i },
+    auto:    { name: '러닝 앱',       valueDir: 'above', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i },
+  };
+
   // 숫자 영역만 잘라 재인식 (이탤릭 큰 숫자 오인식 보정: 140→"740" 등).
   // 배율·기울기(디스큐) 변형 여러 개로 시도하고, 값 범위 안에 드는 첫 결과를 채택
   // — 이탤릭 '1'이 '7'로 흔들려도 한 변형에서 제대로 읽히면 잡힌다.
@@ -1079,27 +1121,34 @@
 
   // 단어 위치(bbox)로 라벨↔숫자 연결 → 심박/케이던스 추출.
   // 요약 카드는 [숫자] 위, [라벨] 아래 배치 → 라벨 바로 위(또는 단위면 같은 줄 왼쪽)의 숫자를 그 지표로 본다.
-  async function extractLabeledStats(worker, img, words) {
+  async function extractLabeledStats(worker, img, words, app) {
+    const cfg = SHOT_APPS[app] || SHOT_APPS.auto;
     const W = (words || []).map(w => ({
       t: w.text || '', b: w.bbox,
       cx: (w.bbox.x0 + w.bbox.x1) / 2,
       cy: (w.bbox.y0 + w.bbox.y1) / 2,
-      h: Math.max(1, w.bbox.y1 - w.bbox.y0),        // 글자 높이 (해상도 무관 임계값 기준)
+      h: Math.max(1, w.bbox.y1 - w.bbox.y0),
     }));
     const numText = t => t.match(/\d{2,3}/) ? parseInt(t.match(/\d{2,3}/)[0], 10) : null;
-    // 라벨(앵커) 기준으로 가장 가까운 '숫자 포함' 단어 (값 범위는 재인식 후 검증)
+    const isNum = w => /\d/.test(w.t) && !/[:'’"]/.test(w.t) && !/\d[.,]\d/.test(w.t);
+
+    // 거리 기준 단위 = '값' 글자 높이의 중앙값.
+    // 라벨 bbox 높이는 2줄 라벨·흐린 회색 글씨에서 들쭉날쭉해(예: '심박수' h=15) 기준으로 쓸 수 없다.
+    const numH = W.filter(isNum).map(w => w.h).sort((a, b) => a - b);
+    const unit = numH.length ? numH[Math.floor(numH.length / 2)] : 24;
+
+    // 라벨(앵커) 주변에서 값 후보를 찾는다. 앱별 배치(값이 라벨 위/아래)를 우선하되 반대쪽도 허용.
     const wordNear = anchor => {
-      const H = anchor.h;
-      let best = null, bestD = Infinity;
+      let best = null, bestScore = Infinity;
       for (const w of W) {
-        // 숫자 포함 · 시간/페이스(: ' ")·진짜 소수(6.74) 제외 — "140."(bpm이 점으로 읽힘)은 허용
-        if (!/\d/.test(w.t) || /[:'’"]/.test(w.t) || /\d[.,]\d/.test(w.t)) continue;
+        if (!isNum(w)) continue;
         const dx = w.cx - anchor.cx, dy = w.cy - anchor.cy;
-        const above = dy < 0 && -dy <= H * 6 && Math.abs(dx) <= H * 8;       // 라벨 위
-        const leftSame = Math.abs(dy) <= H * 1.8 && dx < 0 && -dx <= H * 14; // 같은 줄 왼쪽
-        if (!above && !leftSame) continue;
-        const d = Math.hypot(dx, dy);
-        if (d < bestD) { bestD = d; best = w; }
+        if (Math.abs(dx) > unit * 3.5) continue;          // 같은 열
+        if (Math.abs(dy) > unit * 5.5 || dy === 0) continue;
+        const dirOk = cfg.valueDir === 'below' ? dy > 0 : dy < 0;
+        // 선호 방향이 아니면 큰 벌점 (반대쪽은 최후 수단)
+        const score = Math.abs(dy) + Math.abs(dx) * 0.5 + (dirOk ? 0 : unit * 20);
+        if (score < bestScore) { bestScore = score; best = w; }
       }
       return best;
     };
@@ -1110,20 +1159,48 @@
         if (!nw) continue;
         const re = await readNumberAt(worker, img, nw.b, lo, hi); // 영역 재인식(정확)
         if (re != null) return re;
-        const raw = numText(nw.t);                               // 전체 인식값(보조)
+        const raw = numText(nw.t);                                // 전체 인식값(보조)
         if (raw != null && raw >= lo && raw <= hi) return raw;
       }
       return null;
     }
     const res = {};
-    res.hr = await pick(/심박|bpm/i, 40, 230);
-    res.cadence = await pick(/케이던|던스|이던|cadence|spm/i, 120, 260);
+    res.hr = await pick(cfg.hr, 40, 230);
+    res.cadence = await pick(cfg.cadence, 120, 260);
+
+    // 한글 라벨이 아예 인식되지 않는 경우가 잦아(회색 작은 글씨) 레이아웃으로 보조 추정.
+    // NRC 는 히어로 거리 아래에 3열 격자가 오고, 두 번째 줄이 [고도, 평균 심박, 케이던스] 다.
+    if (cfg.grid && (res.hr == null || res.cadence == null)) {
+      const nums = W.filter(w => isNum(w) && /^\d{1,3}$/.test(w.t.replace(/\D/g, '')) &&
+        Math.abs(w.h - unit) <= unit * 0.45);
+      const hero = W.reduce((a, w) => (w.h > (a ? a.h : 0) ? w : a), null);   // 가장 큰 글씨 = 거리
+      const top = hero ? hero.b.y1 : 0;
+      const bottom = top + unit * 14;                                          // 지도·그래프 영역 제외
+      const rows = [];
+      nums.filter(w => w.cy > top && w.cy < bottom).sort((a, b) => a.cy - b.cy).forEach(w => {
+        const r = rows.find(r => Math.abs(r.y - w.cy) <= unit * 0.7);
+        if (r) r.items.push(w); else rows.push({ y: w.cy, items: [w] });
+      });
+      const grid = rows.filter(r => r.items.length >= 3);
+      if (grid.length) {
+        const cols = grid[grid.length - 1].items.slice().sort((a, b) => a.cx - b.cx);
+        const at = async (i, lo, hi) => {
+          if (!cols[i]) return null;
+          const v = await readNumberAt(worker, img, cols[i].b, lo, hi);
+          if (v != null) return v;
+          const raw = numText(cols[i].t);
+          return (raw != null && raw >= lo && raw <= hi) ? raw : null;
+        };
+        if (res.hr == null) res.hr = await at(cfg.grid.hr, 40, 230);
+        if (res.cadence == null) res.cadence = await at(cfg.grid.cadence, 120, 260);
+      }
+    }
     return res;
   }
 
   // 거리·시간·페이스 중 둘만 있으면 나머지는 역산 가능 → 밴드 폴백 불필요
   const shotEnough = r => ((r.distKm != null) + (r.timeSec != null) + (r.paceSec != null)) >= 2;
-  async function ocrRunShot(worker, img) {
+  async function ocrRunShot(worker, img, app) {
     // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
     await worker.setParameters({ tessedit_pageseg_mode: '3' });
     $('csvStatus').textContent = '인식 중… 25%';
@@ -1134,7 +1211,7 @@
     };
     let r = parseRunShot(data.text.replace(/\n/g, ' '));
     // 심박/케이던스는 라벨 위치 + 숫자 영역 재인식으로 보강 (단위 없거나 한글 라벨, 이탤릭 오인식 대응)
-    const labeled = await extractLabeledStats(worker, img, data.words);
+    const labeled = await extractLabeledStats(worker, img, data.words, app);
     if (r.hr == null && labeled.hr != null) r.hr = labeled.hr;
     if (r.cadence == null && labeled.cadence != null) r.cadence = labeled.cadence;
     if (shotEnough(r)) return r;
@@ -1163,15 +1240,16 @@
     });
   }
 
-  async function handleRunShot(file) {
-    $('csvStatus').textContent = '스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)';
+  async function handleRunShot(file, app) {
+    const appName = (SHOT_APPS[app] || SHOT_APPS.auto).name;
+    $('csvStatus').textContent = `${appName} 스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)`;
     let worker;
     try {
       const T = await loadTesseract();
       const img = await loadImageFile(file);
       worker = await T.createWorker('eng+kor', 1);
       // 전체 인식 → 부족하면 가로 밴드 인식으로 폴백
-      const r = await ocrRunShot(worker, img);
+      const r = await ocrRunShot(worker, img, app);
 
       // 값 역산 (거리·시간·페이스 중 둘만 있어도 나머지 계산)
       let timeDerived = false;
@@ -1199,11 +1277,11 @@
       if (r.distKm && r.timeSec) {
         applyRecord();
         const note = timeDerived ? ' · 총 시간은 거리·페이스로 계산했어요' : '';
-        $('csvStatus').textContent = `✓ 인식됨 — ${parts.join(' · ')} · 값이 맞는지 확인하고 필요하면 수정하세요${note}`;
+        $('csvStatus').textContent = `✓ ${appName} 인식됨 — ${parts.join(' · ')} · 값이 맞는지 확인하고 필요하면 수정하세요${note}`;
       } else if (parts.length) {
         $('csvStatus').textContent = `△ 일부만 인식됨 — ${parts.join(' · ')} · 나머지는 직접 입력 후 '기록 표시하기'`;
       } else {
-        $('csvStatus').textContent = '✕ 값을 인식하지 못했어요. 거리·시간(또는 페이스) 숫자가 크고 선명한 러닝 결과 화면인지 확인해 주세요.';
+        $('csvStatus').textContent = `✕ 값을 인식하지 못했어요. ${appName} 결과 화면 전체가 선명하게 나온 스크린샷인지 확인해 주세요.`;
       }
       if (/[?&](debug|ocr)/i.test(location.search)) showOcrDebug(r);
     } catch (e) {
@@ -1227,12 +1305,20 @@
       '\n\n[OCR 텍스트]\n' + (o.text || '(없음)') +
       '\n\n[단어@좌표]\n' + ((o.words || []).join('  ') || '(없음)');
   }
-  $('btnShot').addEventListener('click', () => $('shotInput').click());
+  // 앱별 캡처 인식 버튼 — 어느 앱인지 알면 라벨·배치를 그 앱에 맞춰 읽는다
+  let shotApp = 'auto';
+  document.querySelectorAll('[data-shot-app]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      shotApp = btn.dataset.shotApp;
+      $('shotInput').click();
+    });
+  });
   $('shotInput').addEventListener('change', () => {
-    if ($('shotInput').files[0]) handleRunShot($('shotInput').files[0]);
+    if ($('shotInput').files[0]) handleRunShot($('shotInput').files[0], shotApp);
     $('shotInput').value = '';
   });
   window.__parseRunShot = parseRunShot; // 개발용 훅
+  window.__handleRunShot = handleRunShot; // 개발용 훅
 
   // ---------- Garmin Connect 연동 (로컬 서버 → 웹 중계 순으로 시도) ----------
   const GARMIN_BASE = 'http://localhost:5077';
