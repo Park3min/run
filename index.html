@@ -923,6 +923,21 @@
       .map(parseTime).filter(v => v !== null && v > 0);
   }
 
+  // 랩 라벨 — 1km 랩이 과반이면 누적 거리 기준(1 km, 2 km, … 15.6 km),
+  // 아니면 랩 번호. 러닝은 대부분 마지막이 부분 랩으로 끝나므로
+  // "전부 1km" 를 요구하면 km 표기를 거의 못 쓴다.
+  const fmtCumKm = v => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+
+  function buildLapLabels(laps) {
+    const kmLaps = laps.filter(l => Math.abs(l.distanceKm - 1) < 0.12).length;
+    if (kmLaps * 2 < laps.length) return laps.map(l => `랩 ${l.lap}`);
+    let cum = 0;
+    return laps.map(l => { cum += l.distanceKm; return `${fmtCumKm(cum)} km`; });
+  }
+
+  // 사진 오버레이는 폭이 좁아 단위·접두어를 뗀 짧은 형태로 쓴다
+  const shortLapLabel = s => String(s).replace(/ km$/, '').replace(/^랩 /, '');
+
   function renderSplitsView() {
     const card = $('splitsCard'), view = $('splitsView');
     view.innerHTML = '';
@@ -1478,8 +1493,7 @@
       const laps = (rawLaps || []).filter(l => l.paceSec > 0);
       if (laps.length > 1) {
         $('inSplits').value = laps.map(l => paceToInput(l.paceSec)).join('\n');
-        const allKm = laps.every(l => Math.abs(l.distanceKm - 1) < 0.12);
-        state.lapLabels = allKm ? null : laps.map(l => `랩 ${l.lap}`);
+        state.lapLabels = buildLapLabels(laps);
       }
     } catch (e) { /* 구간 없이 진행 */ }
 
@@ -1795,7 +1809,11 @@
     if (hasTitleLine) { c.font = fontStr(600, titleSize); titleW = c.measureText(titleText).width; }
 
     const showSp = state.splitsOnPhoto && state.splits.length > 0;
-    const spItems = showSp ? state.splits.slice(0, 10).map((s, i) => `${i + 1}  ${fmtPace(s)}`) : [];
+    const spLabels = state.lapLabels && state.lapLabels.length === state.splits.length
+      ? state.lapLabels.map(shortLapLabel) : null;
+    const spItems = showSp
+      ? state.splits.slice(0, 10).map((s, i) => `${spLabels ? spLabels[i] : i + 1}  ${fmtPace(s)}`)
+      : [];
     let spW = 0, spCols = 0, spRows = 0, spColW = 0;
     if (showSp) {
       c.font = fontStr(600, splitSize);
