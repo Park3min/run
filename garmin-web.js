@@ -258,6 +258,16 @@
       });
     }
 
+    // GPS 경로 [{lat, lon, t}] — 가민 상세 API 의 polyline (실내 활동은 빈 배열)
+    async getRoute(activityId) {
+      const d = await this.api(`/activity-service/activity/${activityId}/details`,
+        { maxChartSize: 10, maxPolylineSize: 3000 });
+      const pl = ((d || {}).geoPolylineDTO || {}).polyline || [];
+      return pl
+        .filter(p => p.valid !== false && p.lat != null && p.lon != null)
+        .map(p => ({ lat: p.lat, lon: p.lon, t: p.time || null }));
+    }
+
     async getSplits(activityId) {
       const data = await this.api(`/activity-service/activity/${activityId}/splits`);
       const out = [];

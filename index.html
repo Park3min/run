@@ -117,28 +117,6 @@
   }
   .import-btn .ib-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 2px; }
 
-  /* 앱별 캡처 인식 버튼 (가민 아래, 3개 나란히) */
-  .shot-label {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; font-weight: 600; color: var(--muted);
-    margin: 14px 0 8px;
-  }
-  .shot-apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .shot-btn {
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: 12px; color: var(--ink);
-    font-family: var(--font); padding: 12px 6px; cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
-  }
-  .shot-btn:hover { border-color: var(--accent); background: rgba(200,245,66,0.07); }
-  .shot-btn:active { transform: scale(0.98); }
-  .shot-btn .sb-name { font-size: 12.5px; font-weight: 700; line-height: 1.25; text-align: center; }
-  .shot-btn .sb-sub { font-size: 10px; font-weight: 500; color: var(--muted); }
-  @media (max-width: 380px) {
-    .shot-btn .sb-name { font-size: 11px; }
-  }
-
   /* [4] 커스텀 date/time picker */
   .field { position: relative; }
   .picker-trigger {
@@ -275,22 +253,47 @@
   /* [3] 내보내기 탭 */
   .export-card { margin-top: 20px; }
   .export-tabs { display: flex; width: 100%; margin-bottom: 16px; }
-  .export-tabs button {
+  /* .seg button 과 우선순위가 같아 뒤에 오는 규칙에 덮이지 않도록 .seg.export-tabs 로 지정 */
+  .seg.export-tabs button {
     flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
     background: none; border: none; color: var(--muted);
     font-family: var(--font); font-size: 13px; font-weight: 700;
     padding: 11px 8px; cursor: pointer;
   }
-  .export-tabs button.on { background: var(--accent); color: var(--accent-ink); }
+  .seg.export-tabs button.on { background: var(--accent); color: var(--accent-ink); }
   .export-panel { display: none; }
   .export-panel.show { display: block; }
+
+  /* 지도 여정 */
+  .map-stage {
+    position: relative; margin: 0 auto; max-width: 560px;
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--border); background: #101010;
+  }
+  .map-stage[data-aspect="4:5"] { max-width: 480px; }
+  .map-stage[data-aspect="9:16"] { max-width: 340px; }
+  .map-stage canvas { display: block; width: 100%; height: auto; cursor: pointer; }
+  .map-play {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 68px; height: 68px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(13,13,13,0.62); color: #fff;
+    border: 1px solid rgba(255,255,255,0.28); cursor: pointer;
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    transition: transform 0.12s ease, opacity 0.2s ease;
+  }
+  .map-play:hover { transform: translate(-50%, -50%) scale(1.06); }
+  .map-play.hidden { opacity: 0; pointer-events: none; }
+  #mapWrap .photo-controls .seg button { padding: 9px 12px; }
   .panel-desc { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin-bottom: 14px; }
   .panel-desc .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .export-tabs button { white-space: nowrap; }
+  .seg.export-tabs button { white-space: nowrap; }
   @media (max-width: 480px) {
-    .export-tabs button { font-size: 11px; padding: 11px 2px; letter-spacing: -0.02em; }
-    .export-tabs button .icon { display: none; }
+    /* 탭 4개 — 글자 길이만큼 폭을 나눠 한 줄에 들어가게 */
+    .seg.export-tabs button { flex: 1 1 auto; min-width: 0; font-size: 11px; padding: 11px 3px; letter-spacing: -0.03em; }
+    .seg.export-tabs button .icon { display: none; }
   }
+  #mapStatus { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
 
   /* ---- splits ---- */
   .splits { display: none; }
@@ -508,32 +511,20 @@
               <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><polyline points="12 10 12 12 13 13"/><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"/><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/></svg>
             </span>
             <span>가민 커넥트에서 가져오기
-              <span class="ib-sub">최근 활동을 그대로 불러옵니다</span>
+              <span class="ib-sub">최근 활동과 GPS 경로를 그대로 불러옵니다</span>
+            </span>
+          </button>
+          <button class="import-btn" id="btnGpx" type="button">
+            <span class="ib-ico">
+              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
+            </span>
+            <span>GPX · TCX 파일 불러오기
+              <span class="ib-sub">스트라바·나이키·애플·삼성에서 내보낸 경로 파일</span>
             </span>
           </button>
         </div>
-
-        <!-- 앱별 캡처 인식 — 어느 앱인지 알려주면 그 앱 화면 구성에 맞춰 더 정확히 읽습니다 -->
-        <div class="shot-label">
-          <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-          캡처 인식 — 어떤 앱인가요?
-        </div>
-        <div class="shot-apps">
-          <button class="shot-btn" type="button" data-shot-app="nrc">
-            <span class="sb-name">Nike Run Club</span>
-            <span class="sb-sub">NRC</span>
-          </button>
-          <button class="shot-btn" type="button" data-shot-app="samsung">
-            <span class="sb-name">삼성 헬스</span>
-            <span class="sb-sub">Samsung</span>
-          </button>
-          <button class="shot-btn" type="button" data-shot-app="apple">
-            <span class="sb-name">애플 피트니스</span>
-            <span class="sb-sub">Fitness</span>
-          </button>
-        </div>
-        <input type="file" id="shotInput" accept="image/*" hidden>
-        <div class="hint" id="csvStatus">가민 연동하거나 러닝 앱 스크린샷으로 자동으로 채우고, 아래에서 확인·수정하세요</div>
+        <input type="file" id="gpxInput" accept=".gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml,application/xml,text/xml" hidden>
+        <div class="hint" id="csvStatus">가민 연동이나 경로 파일로 기록과 지도 경로를 한 번에 채우고, 아래에서 확인·수정하세요</div>
       </div>
 
       <div class="field">
@@ -660,15 +651,19 @@
     </div>
   </div>
 
-  <!-- [3] 내보내기 — 세 옵션을 탭으로 -->
+  <!-- [3] 내보내기 — 옵션을 탭으로 -->
   <div class="card export-card">
     <div class="card-head">
       <h2>내보내기</h2>
     </div>
     <div class="seg export-tabs" id="exportTabs">
+      <button type="button" data-tab="map">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
+        지도 여정
+      </button>
       <button type="button" data-tab="photo" class="on">
         <svg class="icon" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-        사진에 워터마크
+        사진 워터마크
       </button>
       <button type="button" data-tab="png">
         <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -676,8 +671,69 @@
       </button>
       <button type="button" data-tab="video">
         <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-        영상 캡처
+        카운트업
       </button>
+    </div>
+
+    <!-- 지도 여정 패널 — GPS 경로를 지도 위에 그리며 따라가는 애니메이션 -->
+    <div class="export-panel" id="panelMap">
+      <div id="mapEmpty">
+        <div class="panel-desc">달린 경로를 지도 위에 그리며 따라가는 애니메이션을 만듭니다.
+          <span class="sub">가민 커넥트에서 활동을 불러오거나 GPX·TCX 파일을 올리면 바로 만들어져요</span>
+        </div>
+        <button class="btn secondary" type="button" id="btnGpxMap">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          GPX · TCX 파일 불러오기
+        </button>
+      </div>
+      <div id="mapWrap" hidden>
+        <div class="map-stage" id="mapStage">
+          <canvas id="mapCanvas"></canvas>
+          <button type="button" class="map-play" id="mapPlay" aria-label="재생">
+            <svg class="icon" style="width:30px;height:30px" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <div class="photo-controls">
+          <span class="seg" id="mapStyleSeg">
+            <button data-v="dark" class="on">다크</button>
+            <button data-v="light">라이트</button>
+            <button data-v="color">컬러</button>
+            <button data-v="none">지도 없음</button>
+          </span>
+          <span class="seg" id="mapAspectSeg">
+            <button data-v="1:1" class="on">1:1</button>
+            <button data-v="4:5">4:5</button>
+            <button data-v="9:16">9:16</button>
+          </span>
+        </div>
+        <div class="photo-controls">
+          <span class="seg" id="mapColorSeg">
+            <button data-v="pace" class="on">페이스 색</button>
+            <button data-v="mono">단색</button>
+          </span>
+          <span class="seg" id="mapSpeedSeg">
+            <button data-v="5">5초</button>
+            <button data-v="8" class="on">8초</button>
+            <button data-v="12">12초</button>
+          </span>
+        </div>
+        <div class="photo-controls">
+          <span class="seg"><button id="chipMapKm" class="on">km 표시</button></span>
+          <span class="seg"><button id="chipMapTrim" class="on">출발·도착 200m 가리기</button></span>
+        </div>
+        <div class="photo-controls">
+          <button class="btn" id="btnMapVideo">
+            <svg class="icon" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+            영상 저장
+          </button>
+          <button class="btn" id="btnMapImage">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            이미지 저장
+          </button>
+          <button class="btn secondary" id="btnGpxMap2">다른 경로</button>
+        </div>
+        <div class="hint" id="mapStatus">지도를 누르면 다시 재생돼요 · 출발·도착 가리기는 집 위치 노출을 막아줘요</div>
+      </div>
     </div>
 
     <!-- 투명 PNG 패널 -->
@@ -691,14 +747,14 @@
       </button>
     </div>
 
-    <!-- 영상 캡처 패널 -->
+    <!-- 카운트업 패널 -->
     <div class="export-panel" id="panelVideo">
-      <div class="panel-desc">빈 배경에서 카운트업 애니메이션만 재생합니다.
+      <div class="panel-desc">빈 배경에서 숫자 카운트업 애니메이션만 재생합니다.
         <span class="sub">검정·크로마키·흰색 배경 선택 · 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요</span>
       </div>
       <button class="btn" id="btnCapture">
         <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-        영상 캡처 모드 열기
+        카운트업 화면 열기
       </button>
     </div>
 
@@ -833,6 +889,7 @@
 </div>
 
 <script src="garmin-web.js"></script>
+<script src="route-map.js"></script>
 <script>
 (() => {
   'use strict';
@@ -846,6 +903,8 @@
     showDate: true, splitsOnPhoto: false,
     metrics: ['time', 'pace', 'hr', 'cadence'], // 표시 항목 (선택·순서)
     customPos: null, // {fx, fy} 블록 좌상단 (캔버스 비율)
+    route: null,     // GPS 경로 (RouteMap.analyze 결과를 저장용으로 압축)
+    map: { style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true },
   };
 
   const $ = id => document.getElementById(id);
@@ -923,6 +982,21 @@
       .map(parseTime).filter(v => v !== null && v > 0);
   }
 
+  // 랩 라벨 — 1km 랩이 과반이면 누적 거리 기준(1 km, 2 km, … 15.6 km),
+  // 아니면 랩 번호. 러닝은 대부분 마지막이 부분 랩으로 끝나므로
+  // "전부 1km" 를 요구하면 km 표기를 거의 못 쓴다.
+  const fmtCumKm = v => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+
+  function buildLapLabels(laps) {
+    const kmLaps = laps.filter(l => Math.abs(l.distanceKm - 1) < 0.12).length;
+    if (kmLaps * 2 < laps.length) return laps.map(l => `랩 ${l.lap}`);
+    let cum = 0;
+    return laps.map(l => { cum += l.distanceKm; return `${fmtCumKm(cum)} km`; });
+  }
+
+  // 사진 오버레이는 폭이 좁아 단위·접두어를 뗀 짧은 형태로 쓴다
+  const shortLapLabel = s => String(s).replace(/ km$/, '').replace(/^랩 /, '');
+
   function renderSplitsView() {
     const card = $('splitsCard'), view = $('splitsView');
     view.innerHTML = '';
@@ -969,6 +1043,7 @@
     renderSplitsView();
     saveSettings();
     drawCanvas();
+    refreshMap();
     if ($('capOverlay').classList.contains('show')) capReplay();
   }
   $('btnApply').addEventListener('click', applyRecord);
@@ -984,6 +1059,7 @@
     $('inDate').value = todayISO();
     state.lapLabels = null;
     syncPickerLabels();
+    setRoute(null);
   }
   // 입력·표시·상태 전체 초기화 (초기화 버튼)
   function resetRecord() {
@@ -1003,328 +1079,194 @@
     if (confirm('입력된 기록을 모두 지울까요?')) resetRecord();
   });
 
-  // ---------- 러닝 앱 스크린샷 인식 (OCR) — 나이키·삼성 헬스·가민 등 ----------
-  let tesseractPromise = null;
-  function loadTesseract() {
-    if (tesseractPromise) return tesseractPromise;
-    tesseractPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-      s.onload = () => resolve(window.Tesseract);
-      s.onerror = () => { tesseractPromise = null; reject(new Error('OCR 엔진을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.')); };
-      document.head.appendChild(s);
-    });
-    return tesseractPromise;
-  }
+  // ---------- 지도 여정 (GPS 경로 애니메이션) ----------
+  const RM = window.RouteMap;
+  const MAP_ASPECTS = { '1:1': [1, 1], '4:5': [4, 5], '9:16': [9, 16] };
+  const MAP_EXPORT_W = 1080;
+  let mapR = null;                       // 미리보기 렌더러
+  let mapBusy = false;                   // 영상 녹화 중
 
-  // OCR 텍스트에서 러닝 지표 추출 — 앱마다 라벨이 달라 숫자 패턴으로 인식
-  // (나이키는 페이스를 5'42" 따옴표, 삼성·가민은 5:42 콜론으로 표기 → 둘 다 대응)
-  function parseRunShot(raw) {
-    const text = ' ' + raw.replace(/[|]/g, ' ').replace(/[Oo](?=\d)|(?<=\d)[Oo]/g, '0') + ' ';
-    const res = {};
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const hm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
-    // 페이스 (따옴표 표기): m'ss" → 시간과 확실히 구분됨
-    let m = text.match(/(\d)\s*['’`´]\s*(\d{2})/);
-    if (m) { const s = (+m[1]) * 60 + (+m[2]); if (s >= 90 && s <= 1200) res.paceSec = s; }
-
-    // 콜론 시간 토큰 모두 수집 (mm:ss 또는 h:mm:ss)
-    const colon = [...text.matchAll(/(?<!\d)(\d{1,2}):(\d{2})(?::(\d{2}))?(?!\d)/g)].map(t => {
-      const a = +t[1], b = +t[2], c = t[3] !== undefined ? +t[3] : null;
-      return c !== null ? a * 3600 + b * 60 + c : a * 60 + b;
-    }).filter(s => s >= 20 && s <= 6 * 3600);
-    if (colon.length) {
-      res.timeSec = Math.max(...colon); // 총 시간은 보통 가장 큰 값
-      // 따옴표 페이스가 없으면, 콜론 표기 페이스를 (최댓값이 아닌) 페이스대 값에서 추정
-      if (!res.paceSec) {
-        const cand = colon.filter(s => s !== res.timeSec && s >= 120 && s <= 900).sort((a, b) => a - b);
-        if (cand.length) res.paceSec = cand[0];
-      }
-    }
-
-    // 거리: 소수 (소수 2자리 우선, 페이스·시간 콜론/따옴표와 무관)
-    const dec = [...text.matchAll(/(?<![:'’.\d])(\d{1,2})[.,](\d{1,2})(?![:'’.\d])/g)]
-      .map(d => ({ v: parseFloat(d[1] + '.' + d[2]), frac: d[2].length }))
-      .filter(o => o.v > 0 && o.v < 100);
-    if (dec.length) res.distKm = (dec.find(o => o.frac === 2) || dec[0]).v;
-
-    // 심박 / 케이던스 — 단위(bpm/spm)로만 텍스트 인식 (한글 라벨 케이스는 bbox가 전담)
-    let h = text.match(/(\d{2,3})\s*(?:bpm|BPM)/);
-    if (h) { const v = +h[1]; if (v >= 40 && v <= 230) res.hr = v; }
-    let cd = text.match(/(\d{2,3})\s*(?:spm|SPM)/);
-    if (cd) { const v = +cd[1]; if (v >= 120 && v <= 260) res.cadence = v; }
-
-    return res; // 값 역산은 handleRunShot 에서 (밴드 병합 후)
-  }
-
-  // 사진 위 오버레이 글씨는 전체를 한 번에 못 읽으므로, 가로 밴드로 잘라 각각 인식한다.
-  // 각 밴드: 폭 기준 확대 + 그레이스케일 + 대비 강화 + (배경이 어두우면) 자동 반전.
-  function shotBand(img, y0, y1) {
-    const scale = Math.max(1.6, 1400 / img.naturalWidth);
-    const sy = Math.round(y0 * img.naturalHeight), sh = Math.round((y1 - y0) * img.naturalHeight);
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(img.naturalWidth * scale);
-    cv.height = Math.round(sh * scale);
-    const g = cv.getContext('2d');
-    g.drawImage(img, 0, sy, img.naturalWidth, sh, 0, 0, cv.width, cv.height);
-    const id = g.getImageData(0, 0, cv.width, cv.height), d = id.data;
-    let sum = 0;
-    for (let i = 0; i < d.length; i += 4) sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    const invert = sum / (d.length / 4) < 128; // 어두운 배경 → 밝은 글씨 → 반전
-    for (let i = 0; i < d.length; i += 4) {
-      let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      v = (v - 128) * 1.9 + 128;
-      if (invert) v = 255 - v;
-      v = v < 0 ? 0 : v > 255 ? 255 : v;
-      d[i] = d[i + 1] = d[i + 2] = v;
-    }
-    g.putImageData(id, 0, 0);
-    return cv;
-  }
-  // 러닝 앱별 결과 화면 특성.
-  //  valueDir : 라벨 기준 값의 위치 — 나이키·삼성은 [값] 위 / [라벨] 아래, 애플은 [라벨] 위 / [값] 아래
-  //  hr/cadence : 그 앱이 쓰는 라벨(또는 단위) 패턴
-  const SHOT_APPS = {
-    // grid: 라벨을 못 읽었을 때 쓸 격자 열 번호 (NRC 두 번째 줄 = 고도0 · 심박1 · 케이던스2)
-    nrc:     { name: '나이키 런 클럽', valueDir: 'above', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i, grid: { hr: 1, cadence: 2 } },
-    samsung: { name: '삼성 헬스',     valueDir: 'above', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i },
-    apple:   { name: '애플 피트니스', valueDir: 'below', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i },
-    auto:    { name: '러닝 앱',       valueDir: 'above', hr: /심박|heart|bpm/i, cadence: /케이던|던스|이던|cadence|spm/i },
-  };
-
-  // 숫자 영역만 잘라 재인식 (이탤릭 큰 숫자 오인식 보정: 140→"740" 등).
-  // 배율·기울기(디스큐) 변형 여러 개로 시도하고, 값 범위 안에 드는 첫 결과를 채택
-  // — 이탤릭 '1'이 '7'로 흔들려도 한 변형에서 제대로 읽히면 잡힌다.
-  async function readNumberAt(worker, img, b, lo, hi) {
-    const H = b.y1 - b.y0, Wd = b.x1 - b.x0;
-    await worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789' });
-    // 전체/디스큐/왼쪽분리(단위 bpm 제외) 세 가지로 읽어 범위 내 다수결 (이탤릭 1↔7 흔들림 보정).
-    const combos = [[0, 1, 0], [0, 1, -0.16], [0, 0.72, 0]], S = 4; // [창시작, 창끝, 기울기]
-    const votes = {};
-    for (const [wx0, wx1, shx] of combos) {
-      const pad = Math.round(H * 0.3) + 8;
-      const sx = b.x0 + Wd * wx0 - pad, sw = Wd * (wx1 - wx0) + pad * 2, sy = b.y0 - pad, sh = H + pad * 2;
-      const crop = document.createElement('canvas'); crop.width = Math.max(1, Math.round(sw)); crop.height = Math.max(1, Math.round(sh));
-      crop.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
-      const cc = document.createElement('canvas');
-      cc.width = Math.round((crop.width + Math.abs(shx) * crop.height) * S); cc.height = Math.round(crop.height * S);
-      const g = cc.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cc.width, cc.height);
-      g.setTransform(S, 0, shx * S, S, (shx < 0 ? -shx * crop.height * S : 0), 0);
-      g.drawImage(crop, 0, 0);
-      const m = (await worker.recognize(cc)).data.text.trim().match(/\d{2,3}/);
-      if (m) { const v = parseInt(m[0], 10); if (v >= lo && v <= hi) votes[v] = (votes[v] || 0) + 1; }
-    }
-    const entries = Object.entries(votes);
-    if (!entries.length) return null;
-    entries.sort((a, b) => b[1] - a[1]);
-    return parseInt(entries[0][0], 10);
-  }
-
-  // 단어 위치(bbox)로 라벨↔숫자 연결 → 심박/케이던스 추출.
-  // 요약 카드는 [숫자] 위, [라벨] 아래 배치 → 라벨 바로 위(또는 단위면 같은 줄 왼쪽)의 숫자를 그 지표로 본다.
-  async function extractLabeledStats(worker, img, words, app) {
-    const cfg = SHOT_APPS[app] || SHOT_APPS.auto;
-    const W = (words || []).map(w => ({
-      t: w.text || '', b: w.bbox,
-      cx: (w.bbox.x0 + w.bbox.x1) / 2,
-      cy: (w.bbox.y0 + w.bbox.y1) / 2,
-      h: Math.max(1, w.bbox.y1 - w.bbox.y0),
-    }));
-    const numText = t => t.match(/\d{2,3}/) ? parseInt(t.match(/\d{2,3}/)[0], 10) : null;
-    const isNum = w => /\d/.test(w.t) && !/[:'’"]/.test(w.t) && !/\d[.,]\d/.test(w.t);
-
-    // 거리 기준 단위 = '값' 글자 높이의 중앙값.
-    // 라벨 bbox 높이는 2줄 라벨·흐린 회색 글씨에서 들쭉날쭉해(예: '심박수' h=15) 기준으로 쓸 수 없다.
-    // 중앙값이 아니라 상위 75% 지점을 쓴다 — 지도 pill·상태바처럼 작은 숫자가 많으면
-    // 중앙값이 끌려 내려가 정작 큰 스탯 값이 기준에서 벗어난다.
-    const numH = W.filter(isNum).map(w => w.h).sort((a, b) => a - b);
-    const unit = numH.length ? numH[Math.min(numH.length - 1, Math.floor(numH.length * 0.75))] : 24;
-
-    // 라벨(앵커) 주변에서 값 후보를 찾는다. 앱별 배치(값이 라벨 위/아래)를 우선하되 반대쪽도 허용.
-    const wordNear = anchor => {
-      let best = null, bestScore = Infinity;
-      for (const w of W) {
-        if (!isNum(w)) continue;
-        const dx = w.cx - anchor.cx, dy = w.cy - anchor.cy;
-        if (Math.abs(dx) > unit * 3.5) continue;          // 같은 열
-        if (Math.abs(dy) > unit * 5.5 || dy === 0) continue;
-        const dirOk = cfg.valueDir === 'below' ? dy > 0 : dy < 0;
-        // 선호 방향이 아니면 큰 벌점 (반대쪽은 최후 수단)
-        const score = Math.abs(dy) + Math.abs(dx) * 0.5 + (dirOk ? 0 : unit * 20);
-        if (score < bestScore) { bestScore = score; best = w; }
-      }
-      return best;
+  function mapOptions() {
+    return {
+      style: state.map.style,
+      color: state.map.color,
+      trimM: state.map.trim ? 200 : 0,
+      showKm: state.map.km,
+      overlay: {
+        title: state.title,
+        sub: state.showDate ? fmtDateWhen() : '',
+        dist: state.dist, seconds: state.seconds, hr: state.hr, cad: state.cad,
+        metrics: selectedMetrics(), fmtTime, fmtPace,
+      },
     };
-    async function pick(rx, lo, hi) {
-      for (const w of W) {
-        if (!rx.test(w.t)) continue;
-        const nw = wordNear(w);
-        if (!nw) continue;
-        const re = await readNumberAt(worker, img, nw.b, lo, hi); // 영역 재인식(정확)
-        if (re != null) return re;
-        const raw = numText(nw.t);                                // 전체 인식값(보조)
-        if (raw != null && raw >= lo && raw <= hi) return raw;
-      }
-      return null;
-    }
-    const res = {};
-    res.hr = await pick(cfg.hr, 40, 230);
-    res.cadence = await pick(cfg.cadence, 120, 260);
-
-    // 한글 라벨이 아예 인식되지 않는 경우가 잦아(회색 작은 글씨) 레이아웃으로 보조 추정.
-    // NRC 는 히어로 거리 아래에 3열 격자가 오고, 두 번째 줄이 [고도, 평균 심박, 케이던스] 다.
-    if (cfg.grid && (res.hr == null || res.cadence == null)) {
-      // 히어로 거리는 큰 이탤릭이라 빈 단어로 읽히는 일이 있어 기준점으로 쓰지 않는다.
-      // 숫자를 y 로 묶어 행을 만든 뒤, 3열 이상인 행 중 '글자가 큰' 행만 스탯 격자로 본다
-      // (지도 위 '1 km' 같은 작은 라벨도 행을 이루지만 글자가 작아 걸러진다).
-      const nums = W.filter(w => isNum(w) && /^\d{1,3}$/.test(w.t.replace(/\D/g, '')));
-      const rows = [];
-      nums.slice().sort((a, b) => a.cy - b.cy).forEach(w => {
-        const r = rows.find(r => Math.abs(r.y - w.cy) <= Math.max(w.h, r.h) * 0.7);
-        if (r) { r.items.push(w); r.h = Math.max(r.h, w.h); }
-        else rows.push({ y: w.cy, h: w.h, items: [w] });
-      });
-      const cands = rows.filter(r => r.items.length >= 3);
-      const maxH = cands.length ? Math.max(...cands.map(r => r.h)) : 0;
-      const grid = cands.filter(r => r.h >= maxH * 0.8);
-      if (grid.length) {
-        const cols = grid[grid.length - 1].items.slice().sort((a, b) => a.cx - b.cx);
-        const at = async (i, lo, hi) => {
-          if (!cols[i]) return null;
-          const v = await readNumberAt(worker, img, cols[i].b, lo, hi);
-          if (v != null) return v;
-          const raw = numText(cols[i].t);
-          return (raw != null && raw >= lo && raw <= hi) ? raw : null;
-        };
-        if (res.hr == null) res.hr = await at(cfg.grid.hr, 40, 230);
-        if (res.cadence == null) res.cadence = await at(cfg.grid.cadence, 120, 260);
-      }
-    }
-    return res;
   }
 
-  // 거리를 실제로 읽었고 시간·페이스 중 하나가 있으면 충분. 거리를 못 읽었으면
-  // 밴드 인식을 한 번 더 시도한다 (큰 이탤릭 히어로 숫자가 통째로 안 읽히는 경우 대비 —
-  // 역산한 거리는 5.10 이 5.11 로 어긋날 수 있어 실제 값을 우선한다).
-  const shotEnough = r => r.distKm != null && (r.timeSec != null || r.paceSec != null);
-  async function ocrRunShot(worker, img, app) {
-    // 1차: 전체 이미지 (일반 결과 화면 — 큰 숫자까지 안정적으로 읽음)
-    await worker.setParameters({ tessedit_pageseg_mode: '3' });
-    $('csvStatus').textContent = '인식 중… 25%';
-    const data = (await worker.recognize(img)).data;
-    window.__lastOCR = { // 진단용: ?debug 로 화면에 표시
-      text: data.text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim(),
-      words: (data.words || []).map(w => `${w.text}@${Math.round((w.bbox.x0 + w.bbox.x1) / 2)},${Math.round((w.bbox.y0 + w.bbox.y1) / 2)}`),
-    };
-    let r = parseRunShot(data.text.replace(/\n/g, ' '));
-    // 심박/케이던스는 라벨 위치 + 숫자 영역 재인식으로 보강 (단위 없거나 한글 라벨, 이탤릭 오인식 대응)
-    const labeled = await extractLabeledStats(worker, img, data.words, app);
-    if (r.hr == null && labeled.hr != null) r.hr = labeled.hr;
-    if (r.cadence == null && labeled.cadence != null) r.cadence = labeled.cadence;
-    if (shotEnough(r)) return r;
-
-    // 2차: 가로 밴드 (사진 위 오버레이 공유 카드 — 밝기 따라 자동 반전)
-    await worker.setParameters({ tessedit_pageseg_mode: '6', tessedit_char_whitelist: '' });
-    const bands = [[0, 0.25], [0.18, 0.43], [0.36, 0.61], [0.54, 0.79], [0.72, 0.97], [0.88, 1]];
-    let text = '';
-    for (let i = 0; i < bands.length; i++) {
-      text += ' ' + (await worker.recognize(shotBand(img, bands[i][0], bands[i][1]))).data.text.replace(/\n/g, ' ');
-      $('csvStatus').textContent = `인식 중… ${30 + Math.round((i + 1) / bands.length * 65)}%`;
-    }
-    // 밴드 결과는 whole-image r 의 빈 값만 채운다 (심박/케이던스 등 이미 얻은 값 보존)
-    const bandR = parseRunShot(text);
-    for (const k of ['distKm', 'timeSec', 'paceSec', 'hr', 'cadence']) {
-      if (r[k] == null && bandR[k] != null) r[k] = bandR[k];
-    }
-    return r;
-  }
-  function loadImageFile(file) {
-    return new Promise((res, rej) => {
-      const img = new Image();
-      img.onload = () => res(img);
-      img.onerror = () => rej(new Error('이미지를 열지 못했어요.'));
-      img.src = URL.createObjectURL(file);
-    });
-  }
-
-  async function handleRunShot(file, app) {
-    const appName = (SHOT_APPS[app] || SHOT_APPS.auto).name;
-    $('csvStatus').textContent = `${appName} 스크린샷 인식 중… (처음엔 인식 엔진을 받느라 시간이 걸려요)`;
-    let worker;
+  // 새 경로 지정 (null 이면 지움). 경로가 생기면 지도 탭을 열고 바로 재생한다.
+  function setRoute(route) {
+    state.route = route ? RM.compact(route) : null;
     try {
-      const T = await loadTesseract();
-      const img = await loadImageFile(file);
-      worker = await T.createWorker('eng+kor', 1);
-      // 전체 인식 → 부족하면 가로 밴드 인식으로 폴백
-      const r = await ocrRunShot(worker, img, app);
+      if (state.route) localStorage.setItem('runRoute', JSON.stringify(state.route));
+      else localStorage.removeItem('runRoute');
+    } catch (e) { /* 저장 공간 부족 등 — 이번 세션에서만 유지 */ }
+    if (state.route) showExportTab('map');
+    renderMapPanel(!!state.route);
+  }
 
-      // 값 역산 (거리·시간·페이스 중 둘만 있어도 나머지 계산)
-      let timeDerived = false;
-      if (r.distKm == null && r.timeSec != null && r.paceSec != null) r.distKm = r.timeSec / r.paceSec;
-      if (r.timeSec == null && r.distKm != null && r.paceSec != null) { r.timeSec = Math.round(r.distKm * r.paceSec); timeDerived = true; }
-      if (r.distKm != null && r.timeSec != null) {
-        const derived = r.timeSec / r.distKm;
-        if (r.paceSec == null || Math.abs(derived - r.paceSec) / derived > 0.25) r.paceSec = derived;
-      }
+  function renderMapPanel(autoplay) {
+    const has = !!state.route;
+    $('mapEmpty').hidden = has;
+    $('mapWrap').hidden = !has;
+    if (!has) { if (mapR) mapR.stop(); return; }
+    if (!$('panelMap').classList.contains('show')) return;   // 숨겨진 탭은 폭을 모르니 열릴 때 그린다
+    const [aw, ah] = MAP_ASPECTS[state.map.aspect] || MAP_ASPECTS['1:1'];
+    const stage = $('mapStage'), cv = $('mapCanvas');
+    stage.dataset.aspect = state.map.aspect;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cssW = stage.clientWidth || 340;
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssW * dpr * ah / aw);
+    if (!mapR) mapR = new RM.Renderer(cv);
+    mapR.stop();
+    mapR.set(state.route, mapOptions());
+    if (autoplay) playMap(); else { mapR.p = 1; mapR.draw(1); $('mapPlay').classList.remove('hidden'); }
+  }
 
-      const detected = r.distKm != null || r.timeSec != null || r.paceSec != null || r.hr != null || r.cadence != null;
-      if (detected) clearInputFields(); // 인식된 게 있을 때만 기존 입력 제거 후 채움
-      if (r.distKm) $('inDist').value = r.distKm.toFixed(2);
-      if (r.timeSec) $('inTime').value = fmtTime(r.timeSec).replace(/^0:/, '');
-      if (r.hr) $('inHr').value = r.hr;
-      if (r.cadence) $('inCad').value = r.cadence;
+  function playMap() {
+    if (!mapR || !state.route) return;
+    $('mapPlay').classList.add('hidden');
+    mapR.play(state.map.speed * 1000, () => $('mapPlay').classList.remove('hidden'));
+  }
 
-      const parts = [];
-      if (r.distKm) parts.push(`거리 ${r.distKm.toFixed(2)}km`);
-      if (r.timeSec) parts.push(`시간 ${fmtTime(r.timeSec)}${timeDerived ? '(계산)' : ''}`);
-      if (r.paceSec) parts.push(`페이스 ${fmtPace(r.paceSec)}`);
-      if (r.hr) parts.push(`심박 ${r.hr}`);
-      if (r.cadence) parts.push(`케이던스 ${r.cadence}`);
+  // 기록 숫자·제목이 바뀌면 지도 오버레이도 맞춘다 (재생 중이면 다음 재생부터)
+  function refreshMap() {
+    if (!mapR || !state.route || !$('panelMap').classList.contains('show')) return;
+    mapR.set(state.route, mapOptions());
+    if (!mapR._playing) mapR.draw(mapR.p);
+  }
 
-      if (r.distKm && r.timeSec) {
-        applyRecord();
-        const note = timeDerived ? ' · 총 시간은 거리·페이스로 계산했어요' : '';
-        $('csvStatus').textContent = `✓ ${appName} 인식됨 — ${parts.join(' · ')} · 값이 맞는지 확인하고 필요하면 수정하세요${note}`;
-      } else if (parts.length) {
-        $('csvStatus').textContent = `△ 일부만 인식됨 — ${parts.join(' · ')} · 나머지는 직접 입력 후 '기록 표시하기'`;
-      } else {
-        $('csvStatus').textContent = `✕ 값을 인식하지 못했어요. ${appName} 결과 화면 전체가 선명하게 나온 스크린샷인지 확인해 주세요.`;
-      }
-      if (/[?&](debug|ocr)/i.test(location.search)) showOcrDebug(r);
+  $('mapPlay').addEventListener('click', playMap);
+  $('mapCanvas').addEventListener('click', playMap);
+
+  const bindMapSeg = (id, key, parse) => $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    state.map[key] = parse ? parse(b.dataset.v) : b.dataset.v;
+    syncMapControls(); saveSettings(); renderMapPanel(false);
+  });
+  bindMapSeg('mapStyleSeg', 'style');
+  bindMapSeg('mapAspectSeg', 'aspect');
+  bindMapSeg('mapColorSeg', 'color');
+  bindMapSeg('mapSpeedSeg', 'speed', Number);
+  $('chipMapKm').addEventListener('click', () => { state.map.km = !state.map.km; syncMapControls(); saveSettings(); renderMapPanel(false); });
+  $('chipMapTrim').addEventListener('click', () => { state.map.trim = !state.map.trim; syncMapControls(); saveSettings(); renderMapPanel(false); });
+
+  function syncMapControls() {
+    const on = (id, v) => [...$(id).children].forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
+    on('mapStyleSeg', state.map.style);
+    on('mapAspectSeg', state.map.aspect);
+    on('mapColorSeg', state.map.color);
+    on('mapSpeedSeg', state.map.speed);
+    $('chipMapKm').classList.toggle('on', state.map.km);
+    $('chipMapTrim').classList.toggle('on', state.map.trim);
+  }
+
+  function mapExportSize() {
+    const [aw, ah] = MAP_ASPECTS[state.map.aspect] || MAP_ASPECTS['1:1'];
+    return { width: MAP_EXPORT_W, height: Math.round(MAP_EXPORT_W * ah / aw) };
+  }
+
+  $('btnMapImage').addEventListener('click', async () => {
+    if (!state.route || mapBusy) return;
+    $('mapStatus').textContent = '지도를 받는 중…';
+    const { width, height } = mapExportSize();
+    const cv = document.createElement('canvas');
+    cv.width = width; cv.height = height;
+    const r = new RM.Renderer(cv);
+    // '지도 없음'은 배경을 비워 투명 PNG 로 — 다른 사진·영상 위에 얹기 좋다
+    r.set(state.route, Object.assign(mapOptions(), { transparent: state.map.style === 'none' }));
+    r.p = 1;
+    await r.ready();
+    await saveImage(cv, 'map-');
+    $('mapStatus').textContent = '이미지를 저장했어요';
+  });
+
+  $('btnMapVideo').addEventListener('click', async () => {
+    if (!state.route || mapBusy) return;
+    if (!RM.videoType()) {
+      $('mapStatus').textContent = '이 브라우저는 영상 저장을 지원하지 않아요. 미리보기를 재생하며 화면 녹화로 저장해 주세요.';
+      return;
+    }
+    mapBusy = true;
+    const btn = $('btnMapVideo');
+    btn.disabled = true;
+    try {
+      $('mapStatus').textContent = '지도를 받는 중…';
+      const { width, height } = mapExportSize();
+      const { blob, ext } = await RM.recordVideo({
+        route: state.route, opt: mapOptions(), width, height,
+        durationMs: state.map.speed * 1000, holdMs: 1500,
+        onProgress: f => { $('mapStatus').textContent = `영상 만드는 중… ${Math.round(f * 100)}% (화면을 켜 두세요)`; },
+      });
+      await saveBlob(blob, fileName('route-').replace(/\.png$/, '.' + ext));
+      $('mapStatus').textContent = ext === 'mp4' ? '영상을 저장했어요 (MP4)'
+        : '영상을 저장했어요 (WebM — 인스타에 올리려면 MP4 로 변환이 필요할 수 있어요)';
     } catch (e) {
-      $('csvStatus').textContent = `✕ ${e.message || '인식 실패'}`;
-      if (/[?&](debug|ocr)/i.test(location.search)) showOcrDebug({ error: String(e.message || e) });
+      $('mapStatus').textContent = `✕ 영상을 만들지 못했어요: ${e.message || e}`;
     } finally {
-      if (worker) { try { await worker.terminate(); } catch (e) { /* ignore */ } }
+      mapBusy = false;
+      btn.disabled = false;
+    }
+  });
+
+  // ---------- GPX · TCX 파일 불러오기 ----------
+  async function handleTrackFile(file) {
+    $('csvStatus').textContent = `${file.name} 읽는 중…`;
+    try {
+      const { name, pts } = RM.parseTrackFile(await file.text());
+      const route = RM.analyze(pts);
+      if (route.totalM < 50) throw new Error('경로 거리가 너무 짧아요');
+
+      clearInputFields();
+      $('inDist').value = (route.totalM / 1000).toFixed(2);
+      if (route.movingS) $('inTime').value = fmtTime(route.movingS);
+      if (route.avgHr) $('inHr').value = route.avgHr;
+      if (route.avgCad) $('inCad').value = route.avgCad;
+      if (name) $('inTitle').value = name;
+      if (route.startT) {
+        const d = new Date(route.startT);
+        $('inDate').value = ymd(d);
+        $('inStartTime').value = hm(d);
+      }
+      const laps = RM.splits(route);
+      if (laps.length > 1) {
+        $('inSplits').value = laps.map(l => paceToInput(l.paceSec)).join('\n');
+        state.lapLabels = buildLapLabels(laps);
+      }
+      syncPickerLabels();
+
+      if (route.movingS) {
+        applyRecord();
+        $('csvStatus').textContent =
+          `✓ ${file.name} — ${(route.totalM / 1000).toFixed(2)}km · ${fmtTime(route.movingS)}` +
+          `${laps.length > 1 ? ` · 구간 ${laps.length}개` : ''} 불러옴 · 값이 맞는지 확인하세요`;
+      } else {
+        $('csvStatus').textContent = `△ ${file.name} — 시간 기록이 없는 경로예요. 시간을 입력하고 '기록 표시하기'를 눌러 주세요`;
+      }
+      setRoute(route);
+    } catch (e) {
+      $('csvStatus').textContent = `✕ ${e.message || '파일을 읽지 못했어요'}`;
     }
   }
-  // 진단 패널: ?debug=1 로 열면 실제 OCR 텍스트·단어 좌표를 화면에 표시 (스크린샷으로 공유용)
-  function showOcrDebug(r) {
-    let pre = document.getElementById('ocrDebug');
-    if (!pre) {
-      pre = document.createElement('pre');
-      pre.id = 'ocrDebug';
-      pre.style.cssText = 'white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.5;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;max-height:280px;overflow:auto;color:var(--ink-2)';
-      $('csvStatus').after(pre);
-    }
-    const o = window.__lastOCR || {};
-    pre.textContent = '[인식 결과] ' + JSON.stringify(r) +
-      '\n\n[OCR 텍스트]\n' + (o.text || '(없음)') +
-      '\n\n[단어@좌표]\n' + ((o.words || []).join('  ') || '(없음)');
-  }
-  // 앱별 캡처 인식 버튼 — 어느 앱인지 알면 라벨·배치를 그 앱에 맞춰 읽는다
-  let shotApp = 'auto';
-  document.querySelectorAll('[data-shot-app]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      shotApp = btn.dataset.shotApp;
-      $('shotInput').click();
-    });
+  const openGpx = () => $('gpxInput').click();
+  $('btnGpx').addEventListener('click', openGpx);
+  $('btnGpxMap').addEventListener('click', openGpx);
+  $('btnGpxMap2').addEventListener('click', openGpx);
+  $('gpxInput').addEventListener('change', () => {
+    if ($('gpxInput').files[0]) handleTrackFile($('gpxInput').files[0]);
+    $('gpxInput').value = '';
   });
-  $('shotInput').addEventListener('change', () => {
-    if ($('shotInput').files[0]) handleRunShot($('shotInput').files[0], shotApp);
-    $('shotInput').value = '';
-  });
-  window.__parseRunShot = parseRunShot; // 개발용 훅
-  window.__handleRunShot = handleRunShot; // 개발용 훅
 
   // ---------- Garmin Connect 연동 (로컬 서버 → 웹 중계 순으로 시도) ----------
   const GARMIN_BASE = 'http://localhost:5077';
@@ -1478,15 +1420,29 @@
       const laps = (rawLaps || []).filter(l => l.paceSec > 0);
       if (laps.length > 1) {
         $('inSplits').value = laps.map(l => paceToInput(l.paceSec)).join('\n');
-        const allKm = laps.every(l => Math.abs(l.distanceKm - 1) < 0.12);
-        state.lapLabels = allKm ? null : laps.map(l => `랩 ${l.lap}`);
+        state.lapLabels = buildLapLabels(laps);
       }
     } catch (e) { /* 구간 없이 진행 */ }
 
     $('gModal').classList.remove('show');
     $('csvStatus').textContent =
-      `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴`;
+      `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴 · 지도 경로 받는 중…`;
     applyRecord();
+
+    // GPS 경로 → 지도 여정 (실내 러닝처럼 경로가 없으면 조용히 건너뜀)
+    try {
+      let raw;
+      if (gSource === 'web') raw = await gw.getRoute(a.id);
+      else raw = (await (await fetch(`${GARMIN_BASE}/activity/${a.id}/route`)).json()).route;
+      if (raw && raw.length > 1) {
+        setRoute(RM.analyze(raw.map(p => ({ lat: p.lat, lon: p.lon, t: p.t }))));
+        $('csvStatus').textContent =
+          `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴 · 지도 여정 준비됨`;
+        return;
+      }
+    } catch (e) { /* 경로 없이 진행 */ }
+    $('csvStatus').textContent =
+      `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴 (GPS 경로 없음)`;
   }
 
   // ---------- persistence ----------
@@ -1500,6 +1456,7 @@
       style: state.style, pos: state.pos, align: state.align,
       showDate: state.showDate, splitsOnPhoto: state.splitsOnPhoto,
       metrics: state.metrics,
+      map: state.map,
     }));
   }
   function restoreSettings() {
@@ -1522,7 +1479,12 @@
       state.splitsOnPhoto = !!saved.splitsOnPhoto;
       if (Array.isArray(saved.metrics) && saved.metrics.length)
         state.metrics = METRIC_ORDER.filter(k => saved.metrics.includes(k));
+      if (saved.map) Object.assign(state.map, saved.map);
     }
+    try {
+      const r = JSON.parse(localStorage.getItem('runRoute'));
+      if (r && Array.isArray(r.pts) && r.pts.length > 1) state.route = r;
+    } catch (e) { /* ignore */ }
     if (!$('inDate').value) {
       const d = new Date();
       $('inDate').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1653,11 +1615,16 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePickers(); });
 
   // ---------- [3] 내보내기 탭 ----------
-  const EXPORT_PANELS = { photo: 'panelPhoto', png: 'panelPng', video: 'panelVideo' };
+  const EXPORT_PANELS = { map: 'panelMap', photo: 'panelPhoto', png: 'panelPng', video: 'panelVideo' };
+  function showExportTab(tab) {
+    [...$('exportTabs').children].forEach(x => x.classList.toggle('on', x.dataset.tab === tab));
+    Object.entries(EXPORT_PANELS).forEach(([k, id]) => $(id).classList.toggle('show', k === tab));
+    if (tab === 'map') renderMapPanel(false);
+    else if (mapR) mapR.stop();
+  }
   $('exportTabs').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    [...$('exportTabs').children].forEach(x => x.classList.toggle('on', x === b));
-    Object.entries(EXPORT_PANELS).forEach(([k, id]) => $(id).classList.toggle('show', k === b.dataset.tab));
+    showExportTab(b.dataset.tab);
   });
 
   // ---------- [7] 수정하기 → 입력 폼으로 ----------
@@ -1795,7 +1762,11 @@
     if (hasTitleLine) { c.font = fontStr(600, titleSize); titleW = c.measureText(titleText).width; }
 
     const showSp = state.splitsOnPhoto && state.splits.length > 0;
-    const spItems = showSp ? state.splits.slice(0, 10).map((s, i) => `${i + 1}  ${fmtPace(s)}`) : [];
+    const spLabels = state.lapLabels && state.lapLabels.length === state.splits.length
+      ? state.lapLabels.map(shortLapLabel) : null;
+    const spItems = showSp
+      ? state.splits.slice(0, 10).map((s, i) => `${spLabels ? spLabels[i] : i + 1}  ${fmtPace(s)}`)
+      : [];
     let spW = 0, spCols = 0, spRows = 0, spColW = 0;
     if (showSp) {
       c.font = fontStr(600, splitSize);
@@ -1963,10 +1934,13 @@
     });
   }
   async function saveImage(cv, suffix) {
-    const name = fileName(suffix);
     const blob = await canvasToBlob(cv);
     if (!blob) { $('csvStatus').textContent = '✕ 이미지를 만들지 못했어요.'; return; }
-    const file = new File([blob], name, { type: 'image/png' });
+    await saveBlob(blob, fileName(suffix));
+  }
+  // 이미지·영상 공용 저장
+  async function saveBlob(blob, name) {
+    const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
     // 모바일: 공유 시트로 '사진 저장' — 가장 확실한 경로
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file] }); return; }
@@ -2124,6 +2098,14 @@
   // ---------- init ----------
   restoreSettings();
   applyRecord();
+  syncMapControls();
+  renderMapPanel(false);
+  // 창 크기가 바뀌면 지도 미리보기 해상도를 다시 맞춘다
+  let mapResizeT = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(mapResizeT);
+    mapResizeT = setTimeout(() => { if (!mapBusy && !(mapR && mapR._playing)) renderMapPanel(false); }, 200);
+  });
   loadVisits();
 })();
 </script>

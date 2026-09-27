@@ -158,6 +158,17 @@ def get_splits(activity_id: str) -> list:
     return out
 
 
+def get_route(activity_id: str) -> list:
+    """GPS 경로 [{lat, lon, t}] — 실내 활동처럼 경로가 없으면 빈 배열."""
+    d = client.get_activity_details(activity_id, maxchart=10, maxpoly=3000) or {}
+    pl = (d.get("geoPolylineDTO") or {}).get("polyline") or []
+    return [
+        {"lat": p["lat"], "lon": p["lon"], "t": p.get("time")}
+        for p in pl
+        if p.get("valid", True) and p.get("lat") is not None and p.get("lon") is not None
+    ]
+
+
 class Handler(BaseHTTPRequestHandler):
     def _cors(self) -> None:
         # file:// 로 연 앱과 공개 웹(GitHub Pages)에서 모두 접근 허용
@@ -192,6 +203,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/": ("index.html", "text/html; charset=utf-8"),
                 "/index.html": ("index.html", "text/html; charset=utf-8"),
                 "/garmin-web.js": ("garmin-web.js", "application/javascript; charset=utf-8"),
+                "/route-map.js": ("route-map.js", "application/javascript; charset=utf-8"),
             }
             if url.path in static_files:
                 fname, ctype = static_files[url.path]
@@ -212,6 +224,9 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path.startswith("/activity/") and url.path.endswith("/splits"):
                 activity_id = url.path.split("/")[2]
                 self._send(200, {"splits": get_splits(activity_id)})
+            elif url.path.startswith("/activity/") and url.path.endswith("/route"):
+                activity_id = url.path.split("/")[2]
+                self._send(200, {"route": get_route(activity_id)})
             elif url.path == "/ping":
                 self._send(200, {"ok": True})
             else:
