@@ -34,7 +34,7 @@
         const lat = num(p.getAttribute('lat')), lon = num(p.getAttribute('lon'));
         if (lat == null || lon == null) continue;
         const time = textOf(p, 'time');
-        pts.push({ lat, lon, t: time ? Date.parse(time) : null, hr: num(textOf(p, 'hr')), cad: num(textOf(p, 'cad')) });
+        pts.push({ lat, lon, t: time ? Date.parse(time) : null, hr: num(textOf(p, 'hr')), cad: num(textOf(p, 'cad')), ele: num(textOf(p, 'ele')) });
       }
     } else {
       const tps = byTag(doc, 'Trackpoint');
@@ -51,6 +51,7 @@
           hr: hrEl ? num(textOf(hrEl, 'Value')) : null,
           cad: runCad != null ? runCad : num(textOf(p, 'Cadence')),
           dm: num(textOf(p, 'DistanceMeters')),
+          ele: num(textOf(p, 'AltitudeMeters')),
         });
       }
     }
@@ -86,7 +87,7 @@
         if (dt != null && !(dt > 20 && seg / dt < 0.5)) mt += dt;
       }
       pts.push({ lat: p.lat, lon: p.lon, d, mt });
-      if (p.hr > 0 || p.cad > 0) samples.push({ d, hr: p.hr, cad: p.cad });
+      if (p.hr > 0 || p.cad > 0 || p.ele != null) samples.push({ d, hr: p.hr, cad: p.cad, ele: p.ele });
       last = p;
     }
     const avg = a => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : null);
@@ -101,7 +102,10 @@
       startT: hasTime && first ? first.t : null,
       avgHr: hr ? Math.round(hr) : null,
       avgCad: cad ? Math.round(cad) : null,
+      elevGain: null,
     };
+    const eles = samples.filter(s => s.ele != null);
+    if (eles.length > raw.length * 0.5) route.elevGain = Math.round(gainCurve(eles).total);
     if (samples.length > 10) attachSeries(route, samples, cadMul);
     return route;
   }
@@ -110,6 +114,26 @@
   // samples [{d, hr, cad}] (d 는 누적 거리, 단위·척도 무관) → 거리 비율 0~1 을 SERIES_N 칸으로 나눈
   // 부드러운 곡선 route.series = {hr:[…], cad:[…]}. 애니메이션에서 '지금 이 지점의 심박'을 보여준다.
   const SERIES_N = 200;
+
+  // 누적 상승 고도 — 고도를 5점 이동평균으로 다듬고, 3m 넘게 오를 때만 센다 (GPS 고도 잡음 제거).
+  // 반환 {total, at:[{d, g}]} (g: 그 지점까지의 누적 상승 m)
+  function gainCurve(samples) {
+    const s = samples.filter(p => p.ele != null && isFinite(p.ele)).sort((a, b) => a.d - b.d);
+    const sm = s.map((p, i) => {
+      let a = 0, c = 0;
+      for (let j = Math.max(0, i - 2); j <= Math.min(s.length - 1, i + 2); j++) { a += s[j].ele; c++; }
+      return a / c;
+    });
+    let total = 0, ref = sm[0];
+    const at = [];
+    for (let i = 0; i < s.length; i++) {
+      if (sm[i] - ref >= 3) { total += sm[i] - ref; ref = sm[i]; }
+      else if (sm[i] < ref) ref = sm[i];
+      at.push({ d: s[i].d, g: total });
+    }
+    return { total, at };
+  }
+
   function attachSeries(route, samples, cadMul = 1) {
     const dMax = samples.reduce((m, s) => Math.max(m, s.d || 0), 0);
     if (!(dMax > 0)) return route;
@@ -134,8 +158,30 @@
         return Math.round(a / c);
       });
     };
-    route.series = { hr: build('hr', 1), cad: build('cad', cadMul) };
+    route.series = { hr: build('hr', 1), cad: build('cad', cadMul), gain: null };
+    // 누적 상승의 모양(0~1000 비율) — 실제 총량은 기록(가민 요약 등)에 맞춰 곱해 쓴다
+    const gc = gainCurve(samples);
+    if (gc.at.length > 10 && gc.total > 0) {
+      const g = new Array(SERIES_N + 1).fill(0);
+      let j = 0;
+      for (let i = 0; i <= SERIES_N; i++) {
+        const dd = dMax * i / SERIES_N;
+        while (j < gc.at.length - 1 && gc.at[j + 1].d <= dd) j++;
+        g[i] = Math.round(gc.at[j].g / gc.total * 1000);
+      }
+      g[SERIES_N] = 1000;
+      route.series.gain = g;
+    }
     return route;
+  }
+
+  // 진행률 e 까지의 누적 상승 (m) — 곡선이 없으면 거리 비례
+  function gainAt(arr, total, e) {
+    if (!total) return 0;
+    if (!arr || !arr.length) return total * e;
+    const x = Math.max(0, Math.min(1, e)) * (arr.length - 1), i = Math.floor(x), f = x - i;
+    const v = arr[i] + ((arr[Math.min(arr.length - 1, i + 1)] - arr[i]) * f);
+    return total * v / 1000;
   }
 
   // 진행률 e(0~1)의 심박·케이던스 — 달리는 동안은 그 지점의 값, 마지막 3% 에서 평균으로 모인다.
@@ -1161,19 +1207,26 @@ void main(){
         if (m === 'pace' && o.seconds && o.dist) items.push(['페이스', o.fmtPace(dist > 0.02 ? secs / dist : o.seconds / o.dist)]);
         if (m === 'hr' && hr) items.push([hr.avg ? '평균 심박' : '심박', String(hr.v), '평균 심박']);
         if (m === 'cadence' && cad) items.push([cad.avg ? '평균 케이던스' : '케이던스', String(cad.v), '평균 케이던스']);
+        if (m === 'elev' && o.elev) items.push(['상승 고도', `${Math.round(gainAt(ser.gain, o.elev, fracD))} m`, '상승 고도']);
       }
       let x = pad;
-      const gap = u * 6, ly = statsY + u * 14.5;
-      for (const [label, val, wide] of items) {   // wide: 라벨이 바뀌어도 칸 폭이 흔들리지 않게
-        ctx.font = font(600, u * 2.3); ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      const ly = statsY + u * 14.5;
+      // 항목이 많아 폭을 넘으면 글자·간격을 함께 줄인다 (마지막 값 기준 최대 폭으로 잰다)
+      const colW = k => items.map(([label, val, wide]) => {
+        ctx.font = font(800, u * 4.3 * k); const a = ctx.measureText(val.replace(/\d/g, '8')).width;
+        ctx.font = font(600, u * 2.3 * k); return Math.max(a, ctx.measureText(wide || label).width);
+      });
+      let k = 1;
+      const need = colW(1).reduce((a, b) => a + b, 0) + u * 6 * Math.max(0, items.length - 1);
+      if (need > W - pad * 2) k = Math.max(0.6, (W - pad * 2) / need);
+      const gap = u * 6 * k, widths = colW(k);
+      items.forEach(([label, val], i) => {
+        ctx.font = font(600, u * 2.3 * k); ctx.fillStyle = 'rgba(255,255,255,0.68)';
         ctx.fillText(label, x, ly);
-        ctx.font = font(800, u * 4.3); ctx.fillStyle = '#fff';
-        ctx.fillText(val, x, ly + u * 5);
-        ctx.font = font(800, u * 4.3);
-        const w1 = ctx.measureText(val).width;
-        ctx.font = font(600, u * 2.3);
-        x += Math.max(w1, ctx.measureText(wide || label).width) + gap;
-      }
+        ctx.font = font(800, u * 4.3 * k); ctx.fillStyle = '#fff';
+        ctx.fillText(val, x, ly + u * 5 * k);
+        x += widths[i] + gap;
+      });
       ctx.restore();
     }
 
@@ -1245,5 +1298,5 @@ void main(){
     }
   }
 
-  window.RouteMap = { parseTrackFile, analyze, attachSeries, liveMetric, splits, compact, mtAt, Renderer, recordVideo, videoType, STYLES, has3d: () => GL3D.ok() };
+  window.RouteMap = { parseTrackFile, analyze, attachSeries, liveMetric, gainAt, splits, compact, mtAt, Renderer, recordVideo, videoType, STYLES, has3d: () => GL3D.ok() };
 })();

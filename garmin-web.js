@@ -252,6 +252,8 @@
           durationSec: Math.round(a.duration || 0),
           avgHr: Math.round(a.averageHR || 0),
           cadence: Math.round(a.averageRunningCadenceInStepsPerMinute || 0),
+          elevGain: Math.round(a.elevationGain || 0),
+          hasGps: a.hasPolyline !== false,
           isRun: RUN_TYPES.has(type),
           type,
         };
@@ -275,7 +277,7 @@
           const v = row.metrics || [], at = k => (idx[k] != null ? v[idx[k]] : null);
           let cad = at('directDoubleCadence');
           if (cad == null && at('directRunCadence') != null) cad = at('directRunCadence') * 2;
-          if (at('sumDistance') != null) series.push({ d: at('sumDistance'), hr: at('directHeartRate'), cad });
+          if (at('sumDistance') != null) series.push({ d: at('sumDistance'), hr: at('directHeartRate'), cad, ele: at('directElevation') });
         }
       }
       return { route, series };
