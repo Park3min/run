@@ -910,8 +910,10 @@
   <div class="cap-hint" id="mapFsHint">먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요</div>
 </div>
 
-<script src="garmin-web.js"></script>
-<script src="route-map.js"></script>
+<!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
+     JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
+<script src="garmin-web.js?v=7ff97925"></script>
+<script src="route-map.js?v=7f0475cd"></script>
 <script>
 (() => {
   'use strict';
@@ -1122,6 +1124,7 @@
 
   // ---------- 지도 여정 (GPS 경로 애니메이션) ----------
   const RM = window.RouteMap;
+  const has3d = () => !!(RM.has3d && RM.has3d());   // 옛 route-map.js 가 캐시돼 있어도 깨지지 않게
   const MAP_ASPECTS = { '1:1': [1, 1], '4:5': [4, 5], '9:16': [9, 16] };
   const MAP_EXPORT_W = 1080;
   let mapR = null;                       // 미리보기 렌더러
@@ -1132,7 +1135,7 @@
 
   function mapOptions() {
     return {
-      view: state.map.view === '3d' && RM.has3d() ? '3d' : '2d',
+      view: state.map.view === '3d' && has3d() ? '3d' : '2d',
       style: state.map.style,
       color: state.map.color,
       trimM: state.map.trim ? 200 : 0,
@@ -1207,7 +1210,7 @@
 
   function syncMapControls() {
     const on = (id, v) => [...$(id).children].forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
-    on('mapViewSeg', state.map.view === '3d' && RM.has3d() ? '3d' : '2d');
+    on('mapViewSeg', state.map.view === '3d' && has3d() ? '3d' : '2d');
     on('mapStyleSeg', state.map.style);
     on('mapAspectSeg', state.map.aspect);
     on('mapColorSeg', state.map.color);
@@ -2214,7 +2217,7 @@
   // ---------- init ----------
   restoreSettings();
   applyRecord();
-  if (!RM.has3d()) {                     // WebGL 이 없으면 3D 선택지를 잠근다
+  if (!has3d()) {                     // WebGL 이 없으면 3D 선택지를 잠근다
     const b3 = document.querySelector('#mapViewSeg [data-v="3d"]');
     b3.disabled = true; b3.title = '이 브라우저는 3D 보기를 지원하지 않아요';
   }
