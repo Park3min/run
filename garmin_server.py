@@ -130,6 +130,8 @@ def fmt_activity(a: dict) -> dict:
         "distanceKm": round((a.get("distance") or 0) / 1000, 2),
         "durationSec": round(a.get("duration") or 0),
         "avgHr": round(a.get("averageHR") or 0),
+        "elevGain": round(a.get("elevationGain") or 0),
+        "hasGps": a.get("hasPolyline") is not False,
         "cadence": round(a.get("averageRunningCadenceInStepsPerMinute") or 0),
         "isRun": type_key in RUN_TYPES,
         "type": type_key,
@@ -178,7 +180,7 @@ def get_route(activity_id: str) -> dict:
             if cad is None and at("directRunCadence") is not None:
                 cad = at("directRunCadence") * 2
             if at("sumDistance") is not None:
-                series.append({"d": at("sumDistance"), "hr": at("directHeartRate"), "cad": cad})
+                series.append({"d": at("sumDistance"), "hr": at("directHeartRate"), "cad": cad, "ele": at("directElevation")})
     return {"route": route, "series": series}
 
 

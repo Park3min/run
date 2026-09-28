@@ -423,6 +423,8 @@
     border-radius: 5px; padding: 1px 6px; margin-left: 6px;
     vertical-align: 1px;
   }
+  .g-item .g-tag.map { background: transparent; color: var(--accent); border: 1px solid rgba(200,245,66,0.5); }
+  .g-item .g-tag.off { background: transparent; color: var(--muted); border: 1px solid var(--border); }
   .modal-box .btn { margin-top: 14px; }
 
   /* ---- capture mode ---- */
@@ -553,6 +555,10 @@
         </div>
       </div>
       <div class="field">
+        <label for="inElev">상승 고도 (m, 선택)</label>
+        <input id="inElev" type="number" min="0" inputmode="numeric" placeholder="예: 85">
+      </div>
+      <div class="field">
         <label for="inTitle">러닝 제목 (선택)</label>
         <input id="inTitle" type="text" placeholder="예: 한강 아침 러닝">
       </div>
@@ -616,6 +622,7 @@
           <button type="button" class="mchip on" data-metric="pace">페이스</button>
           <button type="button" class="mchip on" data-metric="hr">평균 심박</button>
           <button type="button" class="mchip on" data-metric="cadence">평균 케이던스</button>
+          <button type="button" class="mchip" data-metric="elev">상승 고도</button>
         </div>
       </div>
       <button class="btn" id="btnApply">기록 표시하기</button>
@@ -648,6 +655,10 @@
         <div class="tile" data-metric="cadence">
           <div class="label">평균 케이던스</div>
           <div class="value"><span id="stCad">0</span><small>spm</small></div>
+        </div>
+        <div class="tile" data-metric="elev" style="display:none">
+          <div class="label">상승 고도</div>
+          <div class="value"><span id="stElev">0</span><small>m</small></div>
         </div>
       </div>
       <div class="card splits" id="splitsCard">
@@ -685,7 +696,7 @@
     <div class="export-panel" id="panelMap">
       <div id="mapEmpty">
         <div class="panel-desc">달린 경로를 지도 위에 그리며 따라가는 애니메이션을 만듭니다.
-          <span class="sub">가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요</span>
+          <span class="sub" id="mapEmptyNote">가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요</span>
         </div>
         <button class="btn secondary" type="button" id="btnGarminMap">가민 커넥트에서 가져오기</button>
         <button type="button" class="link-btn" id="btnGpxMap">또는 GPX · TCX 파일로 불러오기</button>
@@ -912,15 +923,15 @@
 
 <!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
      JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
-<script src="garmin-web.js?v=7ff97925"></script>
-<script src="route-map.js?v=3cfd94e0"></script>
+<script src="garmin-web.js?v=340879e7"></script>
+<script src="route-map.js?v=70b795d7"></script>
 <script>
 (() => {
   'use strict';
 
   // ---------- state ----------
   const state = {
-    dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0,
+    dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0, elev: 0,
     title: '', date: '', startTime: '', splits: [], lapLabels: null,
     img: null,
     style: 'gradient', pos: 'bottom', align: 'left',
@@ -941,8 +952,9 @@
     pace:    { label: '페이스',      idSuffix: 'Pace', value: () => fmtPace(state.paceSec) },
     hr:      { label: '평균 심박',    idSuffix: 'Hr',   value: () => state.hr ? `${state.hr} bpm` : '—' },
     cadence: { label: '평균 케이던스', idSuffix: 'Cad',  value: () => state.cad ? `${state.cad} spm` : '—' },
+    elev:    { label: '상승 고도',    idSuffix: 'Elev', value: () => state.elev ? `${state.elev} m` : '—' },
   };
-  const METRIC_ORDER = ['time', 'pace', 'hr', 'cadence'];
+  const METRIC_ORDER = ['time', 'pace', 'hr', 'cadence', 'elev'];
   const selectedMetrics = () => METRIC_ORDER.filter(k => state.metrics.includes(k));
 
   // ---------- parsing / formatting ----------
@@ -999,6 +1011,15 @@
     const ser = state.series || (state.route && state.route.series) || {};
     if ($(prefix + 'Hr')) liveCount($(prefix + 'Hr'), ser.hr, state.hr);
     if ($(prefix + 'Cad')) liveCount($(prefix + 'Cad'), ser.cad, state.cad);
+    // 상승 고도는 누적값이라 0 에서 오르는 게 맞다 — 거리 진행에 맞춰 실제 오르막 모양대로
+    if ($(prefix + 'Elev')) {
+      const el = $(prefix + 'Elev'), start = performance.now();
+      (function frame(now) {
+        const t = Math.min((now - start) / 1400, 1);
+        el.textContent = String(Math.round(RM.gainAt(ser.gain, state.elev, easeOutExpo(t))));
+        if (t < 1) requestAnimationFrame(frame);
+      })(start);
+    }
   }
   // 심박·케이던스: 0 에서 세지 않고, 거리가 차오르는 동안 그 지점의 값을 보여 준 뒤 평균으로 끝낸다.
   // 거리별 기록(가민 상세·GPX)이 없으면 처음부터 평균을 표시. 도는 동안은 라벨에서 '평균'을 뗀다.
@@ -1074,6 +1095,7 @@
     state.paceSec = seconds / dist;
     state.cad = parseInt($('inCad').value, 10) || 0;
     state.hr = parseInt($('inHr').value, 10) || 0;
+    state.elev = parseInt($('inElev').value, 10) || 0;
     state.title = $('inTitle').value.trim();
     state.date = $('inDate').value;
     state.startTime = $('inStartTime').value;
@@ -1097,21 +1119,23 @@
   };
   // 입력란만 비움 (새 기록 불러오기 전 기존 값 제거용)
   function clearInputFields() {
-    ['inDist', 'inTime', 'inCad', 'inHr', 'inTitle', 'inSplits', 'inStartTime'].forEach(id => { $(id).value = ''; });
+    ['inDist', 'inTime', 'inCad', 'inHr', 'inElev', 'inTitle', 'inSplits', 'inStartTime'].forEach(id => { $(id).value = ''; });
     $('inDate').value = todayISO();
     state.lapLabels = null;
     state.series = null;
     syncPickerLabels();
     setRoute(null);
+    $('mapEmptyNote').textContent = '가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요';
   }
   // 입력·표시·상태 전체 초기화 (초기화 버튼)
   function resetRecord() {
     clearInputFields();
-    Object.assign(state, { dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0, title: '', date: $('inDate').value, startTime: '', splits: [] });
+    Object.assign(state, { dist: 0, seconds: 0, paceSec: 0, cad: 0, hr: 0, elev: 0, title: '', date: $('inDate').value, startTime: '', splits: [] });
     $('stDist').textContent = '0.00';
     $('stPace').textContent = `0'00"`;
     $('stTime').textContent = '0:00';
     $('stCad').textContent = '0';
+    $('stElev').textContent = '0';
     $('stHr').textContent = '0';
     renderSplitsView();
     saveSettings();
@@ -1143,7 +1167,7 @@
       overlay: {
         title: state.title,
         sub: state.showDate ? fmtDateWhen() : '',
-        dist: state.dist, seconds: state.seconds, hr: state.hr, cad: state.cad,
+        dist: state.dist, seconds: state.seconds, hr: state.hr, cad: state.cad, elev: state.elev,
         metrics: selectedMetrics(), fmtTime, fmtPace,
       },
     };
@@ -1352,6 +1376,7 @@
       if (route.movingS) $('inTime').value = fmtTime(route.movingS);
       if (route.avgHr) $('inHr').value = route.avgHr;
       if (route.avgCad) $('inCad').value = route.avgCad;
+      if (route.elevGain) $('inElev').value = route.elevGain;
       if (name) $('inTitle').value = name;
       if (route.startT) {
         const d = new Date(route.startT);
@@ -1501,10 +1526,11 @@
       b.type = 'button';
       b.className = 'g-item' + (a.isRun ? '' : ' dim');
       b.innerHTML =
-        `<div class="g-name">${escapeHtml(a.name)}${a.isRun ? '<span class="g-tag">RUN</span>' : ''}</div>` +
+        `<div class="g-name">${escapeHtml(a.name)}${a.isRun ? '<span class="g-tag">RUN</span>' : ''}` +
+        `${a.isRun ? (a.hasGps === false ? '<span class="g-tag off">GPS 없음</span>' : '<span class="g-tag map">지도</span>') : ''}</div>` +
         `<div class="g-meta">${escapeHtml((a.start || '').slice(0, 16))} · ` +
         `${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)}` +
-        `${a.avgHr ? ` · ♥ ${a.avgHr}` : ''}</div>`;
+        `${a.avgHr ? ` · ♥ ${a.avgHr}` : ''}${a.elevGain ? ` · ▲ ${a.elevGain}m` : ''}</div>`;
       b.addEventListener('click', () => pickGarminActivity(a));
       list.appendChild(b);
     });
@@ -1524,6 +1550,7 @@
     $('inTime').value = fmtTime(a.durationSec);
     if (a.avgHr) $('inHr').value = a.avgHr;
     if (a.cadence) $('inCad').value = a.cadence;
+    if (a.elevGain) $('inElev').value = a.elevGain;
     if (a.name) $('inTitle').value = a.name;
     if (a.start) { $('inDate').value = a.start.slice(0, 10); $('inStartTime').value = a.start.slice(11, 16); }
 
@@ -1566,14 +1593,15 @@
     } catch (e) { /* 경로 없이 진행 */ }
     applyRecord();
     if (route) setRoute(route);
-    $('csvStatus').textContent = route ? `${head} · 지도 여정 준비됨` : `${head} (GPS 경로 없음)`;
+    else $('mapEmptyNote').textContent = '이 활동은 GPS 경로가 없어요 (트레드밀·실내 러닝). 지도 여정은 야외에서 GPS 로 기록한 활동에서 만들 수 있어요';
+    $('csvStatus').textContent = route ? `${head} · 지도 여정 준비됨` : `${head} (GPS 경로 없음 — 기록·심박은 그대로 쓸 수 있어요)`;
   }
 
   // ---------- persistence ----------
   function saveSettings() {
     localStorage.setItem('runRecord', JSON.stringify({
       dist: $('inDist').value, time: $('inTime').value,
-      cad: state.cad, hr: state.hr,
+      cad: state.cad, hr: state.hr, elev: state.elev,
       title: state.title, date: state.date, startTime: state.startTime,
       splitsText: $('inSplits').value,
       lapLabels: state.lapLabels,
@@ -1591,6 +1619,7 @@
       $('inTime').value = saved.time;
       $('inCad').value = saved.cad;
       $('inHr').value = saved.hr;
+      $('inElev').value = saved.elev || '';
       $('inTitle').value = saved.title || '';
       $('inDate').value = saved.date || '';
       $('inStartTime').value = saved.startTime || '';
@@ -1856,8 +1885,8 @@
   function renderRecord(c, W, H) {
     const u = Math.min(W, H) / 100;
     const pad = u * 6;
-    const titleSize = u * 3.2, bigSize = u * 11, labelSize = u * 2.6,
-          valSize = u * 4.6, gap = u * 8, splitSize = u * 2.4;
+    const titleSize = u * 3.2, bigSize = u * 11, splitSize = u * 2.4;
+    let labelSize = u * 2.6, valSize = u * 4.6, gap = u * 8;
 
     const titleText = [state.title, state.showDate ? fmtDateWhen() : null]
       .filter(Boolean).join('  ·  ');
@@ -1868,13 +1897,21 @@
 
     // --- 측정 ---
     const stats = selectedMetrics().map(k => [METRIC_DEFS[k].label, METRIC_DEFS[k].value()]);
-    const widths = stats.map(([label, val]) => {
+    const measure = () => stats.map(([label, val]) => {
       c.font = fontStr(700, valSize);
       const wv = c.measureText(val).width;
       c.font = fontStr(500, labelSize);
       return Math.max(wv, c.measureText(label).width);
     });
-    const statsW = stats.length ? widths.reduce((a, b) => a + b, 0) + gap * (stats.length - 1) : 0;
+    let widths = measure();
+    let statsW = stats.length ? widths.reduce((a, b) => a + b, 0) + gap * (stats.length - 1) : 0;
+    // 항목이 많아(예: 상승 고도까지 5개) 사진 폭을 넘으면 한 줄에 들어가게 글자·간격을 줄인다
+    if (statsW > W - pad * 2) {
+      const k = Math.max(0.55, (W - pad * 2) / statsW);
+      labelSize *= k; valSize *= k; gap *= k;
+      widths = measure();
+      statsW = widths.reduce((a, b) => a + b, 0) + gap * (stats.length - 1);
+    }
 
     c.font = fontStr(800, bigSize);
     const distText = fmtDist(state.dist);
