@@ -116,6 +116,13 @@
     background: var(--accent); color: var(--accent-ink);
   }
   .import-btn .ib-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+  .link-btn {
+    background: none; border: none; padding: 6px 2px 0; cursor: pointer;
+    font-family: var(--font); font-size: 12px; color: var(--muted);
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .link-btn:hover { color: var(--ink); }
+  .seg button:disabled { opacity: 0.35; cursor: not-allowed; }
 
   /* [4] 커스텀 date/time picker */
   .field { position: relative; }
@@ -520,17 +527,10 @@
               <span class="ib-sub">최근 활동과 GPS 경로를 그대로 불러옵니다</span>
             </span>
           </button>
-          <button class="import-btn" id="btnGpx" type="button">
-            <span class="ib-ico">
-              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
-            </span>
-            <span>GPX · TCX 파일 불러오기
-              <span class="ib-sub">스트라바·나이키·애플·삼성에서 내보낸 경로 파일</span>
-            </span>
-          </button>
         </div>
+        <button type="button" class="link-btn" id="btnGpx" title="가민 커넥트·스트라바 웹에서 내려받은 경로 파일">GPX · TCX 파일로 불러오기</button>
         <input type="file" id="gpxInput" accept=".gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml,application/xml,text/xml" hidden>
-        <div class="hint" id="csvStatus">가민 연동이나 경로 파일로 기록과 지도 경로를 한 번에 채우고, 아래에서 확인·수정하세요</div>
+        <div class="hint" id="csvStatus">가민 연동으로 기록과 지도 경로를 한 번에 채우고, 아래에서 확인·수정하세요</div>
       </div>
 
       <div class="field">
@@ -685,12 +685,10 @@
     <div class="export-panel" id="panelMap">
       <div id="mapEmpty">
         <div class="panel-desc">달린 경로를 지도 위에 그리며 따라가는 애니메이션을 만듭니다.
-          <span class="sub">가민 커넥트에서 활동을 불러오거나 GPX·TCX 파일을 올리면 바로 만들어져요</span>
+          <span class="sub">가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요</span>
         </div>
-        <button class="btn secondary" type="button" id="btnGpxMap">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-          GPX · TCX 파일 불러오기
-        </button>
+        <button class="btn secondary" type="button" id="btnGarminMap">가민 커넥트에서 가져오기</button>
+        <button type="button" class="link-btn" id="btnGpxMap">또는 GPX · TCX 파일로 불러오기</button>
       </div>
       <div id="mapWrap" hidden>
         <div class="map-stage" id="mapStage">
@@ -700,6 +698,10 @@
           </button>
         </div>
         <div class="photo-controls">
+          <span class="seg" id="mapViewSeg">
+            <button data-v="2d" class="on">2D</button>
+            <button data-v="3d" title="달리는 방향을 따라가는 입체 카메라">3D</button>
+          </span>
           <span class="seg" id="mapStyleSeg">
             <button data-v="dark" class="on">다크</button>
             <button data-v="light">라이트</button>
@@ -737,7 +739,6 @@
             이미지 저장
           </button>
           <button class="btn secondary" id="btnMapFs">전체 화면 재생</button>
-          <button class="btn secondary" id="btnGpxMap2">다른 경로</button>
         </div>
         <div class="hint" id="mapStatus">지도를 누르면 다시 재생돼요 · 출발·도착 가리기는 집 위치 노출을 막아줘요</div>
       </div>
@@ -925,7 +926,8 @@
     metrics: ['time', 'pace', 'hr', 'cadence'], // 표시 항목 (선택·순서)
     customPos: null, // {fx, fy} 블록 좌상단 (캔버스 비율)
     route: null,     // GPS 경로 (RouteMap.analyze 결과를 저장용으로 압축)
-    map: { style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true },
+    series: null,    // 거리별 심박·케이던스 {hr:[], cad:[]} (경로 없는 실내 러닝도)
+    map: { view: '2d', style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true },
   };
 
   const $ = id => document.getElementById(id);
@@ -992,8 +994,25 @@
     countUp($(prefix + 'Dist'), state.dist, fmtDist);
     if ($(prefix + 'Time')) countUp($(prefix + 'Time'), state.seconds, fmtTime);
     if ($(prefix + 'Pace')) countUp($(prefix + 'Pace'), state.paceSec, fmtPace);
-    if ($(prefix + 'Hr')) countUp($(prefix + 'Hr'), state.hr, rnd);
-    if ($(prefix + 'Cad')) countUp($(prefix + 'Cad'), state.cad, rnd);
+    const ser = state.series || (state.route && state.route.series) || {};
+    if ($(prefix + 'Hr')) liveCount($(prefix + 'Hr'), ser.hr, state.hr);
+    if ($(prefix + 'Cad')) liveCount($(prefix + 'Cad'), ser.cad, state.cad);
+  }
+  // 심박·케이던스: 0 에서 세지 않고, 거리가 차오르는 동안 그 지점의 값을 보여 준 뒤 평균으로 끝낸다.
+  // 거리별 기록(가민 상세·GPX)이 없으면 처음부터 평균을 표시. 도는 동안은 라벨에서 '평균'을 뗀다.
+  function liveCount(el, arr, avg, duration = 1400) {
+    const labelEl = (el.closest('.tile, .cap-item') || {}).querySelector?.('.label');
+    if (labelEl && !labelEl.dataset.full) labelEl.dataset.full = labelEl.textContent;
+    const setLabel = isAvg => { if (labelEl) labelEl.textContent = isAvg ? labelEl.dataset.full : labelEl.dataset.full.replace(/^평균\s*/, ''); };
+    if (!avg) { el.textContent = '0'; setLabel(true); return; }
+    const start = performance.now();
+    (function frame(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const m = RM.liveMetric(arr, avg, t >= 1 ? 1 : easeOutExpo(t) * 0.999);
+      el.textContent = String(m.v);
+      setLabel(m.avg);
+      if (t < 1) requestAnimationFrame(frame);
+    })(start);
   }
 
   // ---------- apply record ----------
@@ -1079,6 +1098,7 @@
     ['inDist', 'inTime', 'inCad', 'inHr', 'inTitle', 'inSplits', 'inStartTime'].forEach(id => { $(id).value = ''; });
     $('inDate').value = todayISO();
     state.lapLabels = null;
+    state.series = null;
     syncPickerLabels();
     setRoute(null);
   }
@@ -1112,6 +1132,7 @@
 
   function mapOptions() {
     return {
+      view: state.map.view === '3d' && RM.has3d() ? '3d' : '2d',
       style: state.map.style,
       color: state.map.color,
       trimM: state.map.trim ? 200 : 0,
@@ -1176,6 +1197,7 @@
     state.map[key] = parse ? parse(b.dataset.v) : b.dataset.v;
     syncMapControls(); saveSettings(); renderMapPanel(false);
   });
+  bindMapSeg('mapViewSeg', 'view');
   bindMapSeg('mapStyleSeg', 'style');
   bindMapSeg('mapAspectSeg', 'aspect');
   bindMapSeg('mapColorSeg', 'color');
@@ -1185,6 +1207,7 @@
 
   function syncMapControls() {
     const on = (id, v) => [...$(id).children].forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
+    on('mapViewSeg', state.map.view === '3d' && RM.has3d() ? '3d' : '2d');
     on('mapStyleSeg', state.map.style);
     on('mapAspectSeg', state.map.aspect);
     on('mapColorSeg', state.map.color);
@@ -1334,6 +1357,7 @@
       }
       syncPickerLabels();
 
+      state.series = route.series || null;
       if (route.movingS) {
         applyRecord();
         $('csvStatus').textContent =
@@ -1350,7 +1374,7 @@
   const openGpx = () => $('gpxInput').click();
   $('btnGpx').addEventListener('click', openGpx);
   $('btnGpxMap').addEventListener('click', openGpx);
-  $('btnGpxMap2').addEventListener('click', openGpx);
+  $('btnGarminMap').addEventListener('click', () => $('btnGarmin').click());
   $('gpxInput').addEventListener('change', () => {
     if ($('gpxInput').files[0]) handleTrackFile($('gpxInput').files[0]);
     $('gpxInput').value = '';
@@ -1513,24 +1537,28 @@
     } catch (e) { /* 구간 없이 진행 */ }
 
     $('gModal').classList.remove('show');
-    $('csvStatus').textContent =
-      `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴 · 지도 경로 받는 중…`;
-    applyRecord();
+    const head = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴`;
+    $('csvStatus').textContent = `${head} · 지도 경로 받는 중…`;
 
-    // GPS 경로 → 지도 여정 (실내 러닝처럼 경로가 없으면 조용히 건너뜀)
+    // GPS 경로 + 거리별 심박·케이던스를 먼저 받아 두고 기록을 표시한다
+    // (카운트업이 '그 지점의 심박'을 보여 줄 수 있게). 실내 러닝은 경로 없이 심박만 온다.
+    let route = null;
     try {
-      let raw;
-      if (gSource === 'web') raw = await gw.getRoute(a.id);
-      else raw = (await (await fetch(`${GARMIN_BASE}/activity/${a.id}/route`)).json()).route;
+      const res = gSource === 'web' ? await gw.getRoute(a.id)
+        : await (await fetch(`${GARMIN_BASE}/activity/${a.id}/route`)).json();
+      const raw = Array.isArray(res) ? res : res.route;     // 예전 형식(배열)도 받는다
+      const series = (!Array.isArray(res) && res.series) || [];
       if (raw && raw.length > 1) {
-        setRoute(RM.analyze(raw.map(p => ({ lat: p.lat, lon: p.lon, t: p.t }))));
-        $('csvStatus').textContent =
-          `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴 · 지도 여정 준비됨`;
-        return;
+        route = RM.analyze(raw.map(p => ({ lat: p.lat, lon: p.lon, t: p.t })));
+        if (series.length > 10) RM.attachSeries(route, series);
+        state.series = route.series || null;
+      } else if (series.length > 10) {
+        state.series = RM.attachSeries({ totalM: a.distanceKm * 1000 }, series).series;
       }
     } catch (e) { /* 경로 없이 진행 */ }
-    $('csvStatus').textContent =
-      `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴 (GPS 경로 없음)`;
+    applyRecord();
+    if (route) setRoute(route);
+    $('csvStatus').textContent = route ? `${head} · 지도 여정 준비됨` : `${head} (GPS 경로 없음)`;
   }
 
   // ---------- persistence ----------
@@ -2186,6 +2214,10 @@
   // ---------- init ----------
   restoreSettings();
   applyRecord();
+  if (!RM.has3d()) {                     // WebGL 이 없으면 3D 선택지를 잠근다
+    const b3 = document.querySelector('#mapViewSeg [data-v="3d"]');
+    b3.disabled = true; b3.title = '이 브라우저는 3D 보기를 지원하지 않아요';
+  }
   syncMapControls();
   renderMapPanel(false);
   // 창 크기가 바뀌면 지도 미리보기 해상도를 다시 맞춘다

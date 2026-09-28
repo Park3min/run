@@ -258,14 +258,27 @@
       });
     }
 
-    // GPS 경로 [{lat, lon, t}] — 가민 상세 API 의 polyline (실내 활동은 빈 배열)
+    // GPS 경로 [{lat, lon, t}] + 거리별 심박·케이던스 [{d, hr, cad}] — 가민 상세 API
+    // (polyline 은 경로, activityDetailMetrics 는 약 600개로 줄인 초 단위 기록. 실내 활동은 route 가 빈 배열)
     async getRoute(activityId) {
       const d = await this.api(`/activity-service/activity/${activityId}/details`,
-        { maxChartSize: 10, maxPolylineSize: 3000 });
-      const pl = ((d || {}).geoPolylineDTO || {}).polyline || [];
-      return pl
+        { maxChartSize: 600, maxPolylineSize: 3000 }) || {};
+      const pl = (d.geoPolylineDTO || {}).polyline || [];
+      const route = pl
         .filter(p => p.valid !== false && p.lat != null && p.lon != null)
         .map(p => ({ lat: p.lat, lon: p.lon, t: p.time || null }));
+      const idx = {};
+      (d.metricDescriptors || []).forEach(m => { idx[m.key] = m.metricsIndex; });
+      const series = [];
+      if (idx.sumDistance != null) {
+        for (const row of d.activityDetailMetrics || []) {
+          const v = row.metrics || [], at = k => (idx[k] != null ? v[idx[k]] : null);
+          let cad = at('directDoubleCadence');
+          if (cad == null && at('directRunCadence') != null) cad = at('directRunCadence') * 2;
+          if (at('sumDistance') != null) series.push({ d: at('sumDistance'), hr: at('directHeartRate'), cad });
+        }
+      }
+      return { route, series };
     }
 
     async getSplits(activityId) {
