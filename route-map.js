@@ -480,13 +480,13 @@ void main(){
   // AWS 공개 지형 타일(Terrarium, 키 불필요·CORS 허용). 픽셀 색 → 해발 m: R·256 + G + B/256 − 32768.
   // z12 한 칸 ≈ 30m (한국 위도) — SRTM 원자료 해상도와 비슷해 이보다 자세히 받을 필요가 없다.
   const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-  const DEM_Z = 12;
+  const DEM_Z = 12;                    // 최대 줌 (짧은 코스)
   const TERRAIN_EXAG = 1.6;             // 높낮이를 조금 과장해야 도시의 완만한 언덕도 느껴진다
   const DEM = {
     tiles: new Map(),
     version: 0,                         // 새 타일이 들어올 때마다 증가 → 메시·경로 높이 다시 계산
-    tile(tx, ty) {
-      const n = 2 ** DEM_Z, xx = ((tx % n) + n) % n, key = `${xx}/${ty}`;
+    tile(z, tx, ty) {
+      const n = 2 ** z, xx = ((tx % n) + n) % n, key = `${z}/${xx}/${ty}`;
       let t = this.tiles.get(key);
       if (t) return t;
       t = { ok: false, failed: false, h: null };
@@ -506,15 +506,15 @@ void main(){
         };
         img.onerror = () => { t.failed = true; res(); };
       });
-      img.src = DEM_URL.replace('{z}', DEM_Z).replace('{x}', xx).replace('{y}', ty);
+      img.src = DEM_URL.replace('{z}', z).replace('{x}', xx).replace('{y}', ty);
       this.tiles.set(key, t);
-      if (this.tiles.size > 64) this.tiles.delete(this.tiles.keys().next().value);
+      if (this.tiles.size > 120) this.tiles.delete(this.tiles.keys().next().value);
       return t;
     },
     // 메르카토르 (U, V) 의 해발 고도 (m). 아직 없으면 null (요청은 해 둔다)
-    at(U, V) {
-      const n = 2 ** DEM_Z, fx = U * n, fy = V * n, tx = Math.floor(fx), ty = Math.floor(fy);
-      const t = this.tile(tx, ty);
+    at(z, U, V) {
+      const n = 2 ** z, fx = U * n, fy = V * n, tx = Math.floor(fx), ty = Math.floor(fy);
+      const t = this.tile(z, tx, ty);
       if (!t.ok) return null;
       const px = Math.max(0, Math.min(255, (fx - tx) * 256 - 0.5)), py = Math.max(0, Math.min(255, (fy - ty) * 256 - 0.5));
       const x0 = Math.floor(px), y0 = Math.floor(py), x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1);
@@ -523,11 +523,15 @@ void main(){
       const bot = h[y1 * 256 + x0] * (1 - ax) + h[y1 * 256 + x1] * ax;
       return top * (1 - ay) + bot * ay;
     },
-    // 영역(메르카토르)의 타일을 미리 요청 → 모두 도착하면 resolve
-    prefetch(u0, v0, u1, v1) {
-      const n = 2 ** DEM_Z, list = [];
-      for (let tx = Math.floor(u0 * n); tx <= Math.floor(u1 * n); tx++)
-        for (let ty = Math.floor(v0 * n); ty <= Math.floor(v1 * n); ty++) if (list.length < 36) list.push(this.tile(tx, ty));
+    // 경로가 지나는 타일과 그 둘레 한 칸을 미리 요청 → 모두 도착하면 resolve
+    // (넓은 사각형 전체를 받으면 긴 코스에서 정작 경로 주변이 빠진다)
+    prefetchAlong(z, uvs) {
+      const n = 2 ** z, keys = new Map();
+      for (const [U, V] of uvs) {
+        const tx = Math.floor(U * n), ty = Math.floor(V * n);
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) keys.set(`${tx + dx}/${ty + dy}`, [tx + dx, ty + dy]);
+      }
+      const list = [...keys.values()].slice(0, 80).map(([x, y]) => this.tile(z, x, y));
       return Promise.all(list.map(t => t.promise));
     },
   };
@@ -535,7 +539,7 @@ void main(){
   // 지면 좌표(m) → 그려질 높이 z (m, 과장 포함). terrain: {geo, on}
   function terrainZ(tr, x, y) {
     if (!tr || !tr.on) return 0;
-    const h = DEM.at(tr.geo.cu + x / tr.geo.C, tr.geo.cv - y / tr.geo.C);
+    const h = DEM.at(tr.z, tr.geo.cu + x / tr.geo.C, tr.geo.cv - y / tr.geo.C);
     return h == null ? tr.fallback : (h - tr.base) * TERRAIN_EXAG;
   }
 
@@ -543,7 +547,7 @@ void main(){
   const meshCache = new Map();
   const LIGHT = (() => { const l = [-0.55, 0.6, 1.0], n = Math.hypot(...l); return l.map(v => v / n); })();
   function tileMesh(t, N, tr, u0, v0, us) {
-    const key = `${t.z}/${t.x}/${t.y}/${N}/${u0}/${v0}/${us}/${tr && tr.on ? DEM.version + ':' + tr.base : 'flat'}/${tr ? tr.geo.cu : 0}`;
+    const key = `${t.z}/${t.x}/${t.y}/${N}/${u0}/${v0}/${us}/${tr && tr.on ? DEM.version + ':' + tr.base + ':' + tr.z : 'flat'}/${tr ? tr.geo.cu : 0}`;
     let m = meshCache.get(key);
     if (m) { meshCache.delete(key); meshCache.set(key, m); return m; }
     const [x0, y0, x1, y1] = t.rect, out = new Float32Array((N + 1) * (N + 1) * 6);
@@ -777,16 +781,19 @@ void main(){
       const TX = TY * W / H;
       const fit = Math.max((y1 - y0) / (2 * TY * fracH), (x1 - x0) / (2 * TX * fracW), 150);
       const ovOy = hasOv ? 1 - 2 * 0.435 : 0;
-      // 따라가는 카메라는 넉넉히 멀리서(한 화면에 약 0.5~2.6km) — 가까우면 화면이 빨리 흘러 어지럽다
+      // 따라가는 카메라는 넉넉히 멀리서 — 한 화면 폭을 코스의 18%(0.5~8km)로 잡으면 코스 길이와
+      // 관계없이 화면이 초당 약 반 화면씩 흐른다 (마라톤도 5km 와 같은 체감 속도)
       this.cam3 = {
         top: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 0, D: fit, oy: ovOy },
         end: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 45 * rad, D: fit * 1.15, oy: ovOy },
-        followD: Math.min(2600, Math.max(500, total * 0.18)) / (2 * TY),
+        followD: Math.min(8000, Math.max(500, total * 0.18)) / (2 * TY),
       };
-      // 지형: 경로 주변(안개 끝까지) 고도 타일을 미리 요청
-      const g = this.geo, mg = this.cam3.followD * 5 + 500;
-      this.terrain = { geo: g, on: true, base: null, fallback: 0 };
-      this._demReady = DEM.prefetch(g.cu + (x0 - mg) / g.C, g.cv - (y1 + mg) / g.C, g.cu + (x1 + mg) / g.C, g.cv - (y0 - mg) / g.C);
+      // 지형: 경로가 지나는 곳 둘레의 고도 타일을 미리 요청 (그 밖은 보일 때 받는다)
+      const g = this.geo;
+      // 고도 해상도: 보이는 범위(안개 끝 ≈ 4.6D)가 타일 6장 안팎이 되게 — 긴 코스는 거칠게
+      const demZ = Math.max(8, Math.min(DEM_Z, Math.floor(Math.log2(g.C / (1.53 * this.cam3.followD)))));
+      this.terrain = { geo: g, on: true, base: null, fallback: 0, z: demZ };
+      this._demReady = DEM.prefetchAlong(demZ, s.filter((_, i) => i % 20 === 0).map(p => [g.cu + p.wx / g.C, g.cv - p.wy / g.C]));
       this._zVer = -1;
       this._demReady.then(() => { if (!this._playing && this.is3d) this.redraw(); });
       // 진행 방향 — 앞뒤 구간의 방향을 거리 기준으로 양방향 지수 평활.
@@ -822,7 +829,7 @@ void main(){
       if (tr.base == null) {                          // 기준 높이 = 경로 가장 낮은 곳 (숫자를 작게)
         let mn = Infinity;
         for (let i = 0; i < this.scr.length; i += 10) {
-          const p = this.scr[i], h = DEM.at(tr.geo.cu + p.wx / tr.geo.C, tr.geo.cv - p.wy / tr.geo.C);
+          const p = this.scr[i], h = DEM.at(tr.z, tr.geo.cu + p.wx / tr.geo.C, tr.geo.cv - p.wy / tr.geo.C);
           if (h != null) mn = Math.min(mn, h);
         }
         if (isFinite(mn)) tr.base = mn;
