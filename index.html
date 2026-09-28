@@ -2,21 +2,55 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- viewport-fit=cover: 노치·다이나믹 아일랜드 영역까지 쓰고, 여백은 safe-area 로 직접 잡는다 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2f4f6">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101113">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600'%3E%3Crect width='600' height='600' fill='%23178a4c'/%3E%3Cpath d='M140 440 L255 305 L330 370 L455 200' fill='none' stroke='%23fff' stroke-width='60' stroke-linecap='square'/%3E%3Crect x='412' y='158' width='86' height='86' fill='%23fff'/%3E%3C/svg%3E">
 <title>러닝로그</title>
 <style>
+  /* ---- 디자인 토큰 ----
+     시스템 설정에 따라 라이트·다크. 브랜드 색은 두 모드에서 모두 선명한 중간 명도의 초록
+     (#178a4c — 흰 글씨 대비 4.4:1, 어두운 배경 대비 4.4:1). 작은 강조 글씨만 모드별로 명도를 맞춘다. */
   :root {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --surface-2: #222221;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --muted: #898781;
-    --border: rgba(255,255,255,0.10);
-    --accent: #c8f542;
-    --accent-ink: #0d0d0d;
-    --font: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+    color-scheme: light dark;
+    --page: #f2f4f6;
+    --surface: #ffffff;
+    --surface-2: #f2f4f6;
+    --ink: #191f28;
+    --ink-2: #4e5968;
+    --muted: #6b7684;
+    --border: #e5e8eb;
+    --accent: #178a4c;
+    --accent-ink: #ffffff;
+    --accent-text: #13824a;
+    --accent-soft: rgba(23,138,76,0.08);
+    --accent-line: rgba(23,138,76,0.40);
+    --dim: #b0b8c1;
+    --shadow: 0 12px 32px rgba(0,20,50,0.14);
+    --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", sans-serif;
+    /* Safe Area — 노치·다이나믹 아일랜드(위), 홈 인디케이터(아래), 가로 모드 좌우 */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #101113;
+      --surface: #1b1c1f;
+      --surface-2: #26272b;
+      --ink: #f2f4f6;
+      --ink-2: #c1c7cf;
+      --muted: #8b95a1;
+      --border: rgba(255,255,255,0.09);
+      --accent-text: #3dbb73;
+      --accent-soft: rgba(61,187,115,0.10);
+      --accent-line: rgba(61,187,115,0.42);
+      --dim: #4b4f56;
+      --shadow: 0 16px 40px rgba(0,0,0,0.55);
+    }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -24,8 +58,11 @@
     color: var(--ink);
     font-family: var(--font);
     min-height: 100vh;
-    padding: 32px 20px 64px;
+    padding: calc(24px + var(--safe-top)) calc(20px + var(--safe-right)) calc(48px + var(--safe-bottom)) calc(20px + var(--safe-left));
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .wrap { max-width: 960px; margin: 0 auto; }
 
   header { margin-bottom: 28px; }
@@ -33,7 +70,8 @@
     font-size: 26px; font-weight: 800; letter-spacing: -0.02em;
     display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
   }
-  header h1 .dot { color: var(--accent); }
+  /* 브랜드 로고 — 600×600 비율의 각진 정사각형 */
+  header h1 .logo { width: 28px; aspect-ratio: 1 / 1; border-radius: 0; flex: none; align-self: center; display: block; }
   header h1 .by {
     font-size: 12px; font-weight: 600; letter-spacing: 0;
     color: var(--muted);
@@ -79,7 +117,6 @@
   .field input:focus, .field textarea:focus { border-color: var(--accent); }
   .field .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  input[type="date"] { color-scheme: dark; }
 
   /* [1] 입력값 vs placeholder 대비 분리 — 값은 고대비 흰색+굵게, placeholder는 muted */
   .field input, .field textarea { color: var(--ink); font-weight: 600; }
@@ -100,15 +137,15 @@
   .import-actions { display: flex; flex-direction: column; gap: 10px; }
   .import-btn {
     display: flex; align-items: center; gap: 12px; width: 100%;
-    background: linear-gradient(180deg, rgba(200,245,66,0.10), rgba(200,245,66,0.04));
-    border: 1px solid rgba(200,245,66,0.45);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
     border-radius: 14px;
     color: var(--ink);
     font-family: var(--font); font-size: 15px; font-weight: 700;
     padding: 14px 16px; cursor: pointer; text-align: left;
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
   }
-  .import-btn:hover { border-color: var(--accent); background: rgba(200,245,66,0.14); }
+  .import-btn:hover { border-color: var(--accent); }
   .import-btn:active { transform: scale(0.99); }
   .import-btn .ib-ico {
     width: 38px; height: 38px; border-radius: 10px; flex: none;
@@ -141,7 +178,7 @@
     position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; min-width: 100%;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 12px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+    box-shadow: var(--shadow);
   }
   .picker-pop.show { display: block; }
   .pk-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -160,7 +197,7 @@
     height: 32px; cursor: pointer;
   }
   .pk-day:hover { border-color: var(--border); color: var(--ink); }
-  .pk-day.dim { color: #55544f; }
+  .pk-day.dim { color: var(--dim); }
   .pk-day.today { border-color: var(--border); }
   .pk-day.sel { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .pk-foot { display: flex; gap: 8px; margin-top: 10px; }
@@ -200,7 +237,7 @@
     background: none; border: none; padding: 2px 0; cursor: pointer;
     color: var(--muted); font-family: var(--font); font-size: 13px; font-weight: 600;
   }
-  .back-link:hover { color: var(--accent); }
+  .back-link:hover { color: var(--accent-text); }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -243,11 +280,11 @@
   /* 평균 페이스 — 러너 핵심 지표라 우선순위 강조 */
   .tile[data-metric="pace"] {
     flex: 1.7 1 190px;
-    border-color: rgba(200,245,66,0.45);
-    background: linear-gradient(180deg, rgba(200,245,66,0.07), rgba(200,245,66,0.02)), var(--surface);
+    border-color: var(--accent-line);
+    background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
     padding: 18px 18px 20px;
   }
-  .tile[data-metric="pace"] .label { color: var(--accent); font-weight: 700; }
+  .tile[data-metric="pace"] .label { color: var(--accent-text); font-weight: 700; }
   .tile[data-metric="pace"] .value { font-size: 38px; letter-spacing: -0.02em; }
   .tile[data-metric="pace"] .value small { font-size: 15px; }
   @media (max-width: 640px) {
@@ -330,7 +367,7 @@
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
   }
-  .drop.dragover { border-color: var(--accent); background: rgba(200,245,66,0.06); }
+  .drop.dragover { border-color: var(--accent); background: var(--accent-soft); }
   .drop strong { color: var(--ink-2); }
   .canvas-wrap { display: none; }
   .canvas-wrap.show { display: block; }
@@ -382,9 +419,9 @@
   .modal {
     display: none;
     position: fixed; inset: 0; z-index: 90;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.5);
     align-items: center; justify-content: center;
-    padding: 20px;
+    padding: calc(20px + var(--safe-top)) calc(20px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(20px + var(--safe-left));
   }
   .modal.show { display: flex; }
   .modal-box {
@@ -423,7 +460,7 @@
     border-radius: 5px; padding: 1px 6px; margin-left: 6px;
     vertical-align: 1px;
   }
-  .g-item .g-tag.map { background: transparent; color: var(--accent); border: 1px solid rgba(200,245,66,0.5); }
+  .g-item .g-tag.map { background: transparent; color: var(--accent-text); border: 1px solid var(--accent-line); }
   .g-item .g-tag.off { background: transparent; color: var(--muted); border: 1px solid var(--border); }
   .modal-box .btn { margin-top: 14px; }
 
@@ -441,8 +478,8 @@
   .cap-overlay[data-bg="green"] .cap-stage { text-shadow: 0 2px 12px rgba(0,0,0,0.55); }
   .cap-controls {
     position: absolute; top: 0; left: 0; right: 0;
-    display: flex; gap: 10px; align-items: center; justify-content: center;
-    padding: 16px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+    padding: calc(16px + var(--safe-top)) calc(16px + var(--safe-right)) 16px calc(16px + var(--safe-left));
     background: rgba(0,0,0,0.55);
     backdrop-filter: blur(6px);
     transition: opacity 0.4s ease;
@@ -457,7 +494,7 @@
   .cap-item .label { font-size: clamp(12px, 1.4vw, 16px); color: var(--cap-sub); margin-bottom: 6px; }
   .cap-item .value { font-size: clamp(26px, 4.5vw, 52px); font-weight: 700; }
   .cap-hint {
-    position: absolute; bottom: 18px; left: 0; right: 0;
+    position: absolute; bottom: calc(18px + var(--safe-bottom)); left: 0; right: 0;
     text-align: center; font-size: 12px; color: var(--cap-sub);
     transition: opacity 0.4s ease;
   }
@@ -501,7 +538,12 @@
 <div class="wrap">
   <header>
     <h1>
-      <span class="name">러닝로그<span class="dot">.</span></span>
+      <svg class="logo" viewBox="0 0 600 600" role="img" aria-label="러닝로그 로고">
+        <rect width="600" height="600" fill="#178a4c"/>
+        <path d="M140 440 L255 305 L330 370 L455 200" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="square"/>
+        <rect x="412" y="158" width="86" height="86" fill="#fff"/>
+      </svg>
+      <span class="name">러닝로그</span>
       <span class="by">by 빠르크 <span class="handle">@pki_runner</span></span>
     </h1>
     <p>러닝 기록을 입력하면 카운트업 애니메이션으로 표시하고, 사진 위에 기록을 얹어 저장할 수 있어요.</p>
@@ -526,13 +568,13 @@
               <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><polyline points="12 10 12 12 13 13"/><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"/><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/></svg>
             </span>
             <span>가민 커넥트에서 가져오기
-              <span class="ib-sub">최근 활동과 GPS 경로를 그대로 불러옵니다</span>
+              <span class="ib-sub">최근 활동과 GPS 경로를 그대로 불러와요</span>
             </span>
           </button>
         </div>
         <button type="button" class="link-btn" id="btnGpx" title="가민 커넥트·스트라바 웹에서 내려받은 경로 파일">GPX · TCX 파일로 불러오기</button>
         <input type="file" id="gpxInput" accept=".gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml,application/xml,text/xml" hidden>
-        <div class="hint" id="csvStatus">가민 연동으로 기록과 지도 경로를 한 번에 채우고, 아래에서 확인·수정하세요</div>
+        <div class="hint" id="csvStatus">가민에서 불러오면 기록과 지도 경로가 한 번에 채워져요. 아래에서 바로 고칠 수 있어요</div>
       </div>
 
       <div class="field">
@@ -542,7 +584,7 @@
       <div class="field">
         <label for="inTime">시간</label>
         <input id="inTime" type="text" inputmode="numeric" placeholder="예: 31:20 또는 1:05:30" value="31:20">
-        <div class="hint">분:초 또는 시:분:초 형식 · 페이스는 자동 계산됩니다</div>
+        <div class="hint">분:초 또는 시:분:초로 적어 주세요 · 페이스는 자동으로 계산돼요</div>
       </div>
       <div class="row2">
         <div class="field">
@@ -613,10 +655,10 @@
       <div class="field">
         <label for="inSplits">구간 기록 — 1km 페이스 (선택)</label>
         <textarea id="inSplits" placeholder="한 줄에 하나씩&#10;5:50&#10;5:42&#10;5:38"></textarea>
-        <div class="hint">분:초 형식, 줄바꿈 또는 쉼표로 구분</div>
+        <div class="hint">분:초로 적고, 줄바꿈이나 쉼표로 나눠 주세요</div>
       </div>
       <div class="field">
-        <label>표시 항목 (사진·영상에 표시)</label>
+        <label>사진·영상에 보여 줄 항목</label>
         <div class="metric-chips" id="metricChips">
           <button type="button" class="mchip on" data-metric="time">시간</button>
           <button type="button" class="mchip on" data-metric="pace">페이스</button>
@@ -625,7 +667,7 @@
           <button type="button" class="mchip" data-metric="elev">상승 고도</button>
         </div>
       </div>
-      <button class="btn" id="btnApply">기록 표시하기</button>
+      <button class="btn" id="btnApply">기록 보기</button>
     </div>
 
     <!-- 스탯 -->
@@ -633,7 +675,7 @@
       <!-- [7] 입력 화면으로 돌아가기 -->
       <button type="button" class="back-link" id="btnEdit">
         <svg class="icon" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
-        수정하기
+        기록 고치기
       </button>
       <div class="hero">
         <div class="label">총 거리</div>
@@ -695,7 +737,7 @@
     <!-- 지도 여정 패널 — GPS 경로를 지도 위에 그리며 따라가는 애니메이션 -->
     <div class="export-panel" id="panelMap">
       <div id="mapEmpty">
-        <div class="panel-desc">달린 경로를 지도 위에 그리며 따라가는 애니메이션을 만듭니다.
+        <div class="panel-desc">달린 경로를 지도 위에 그리며 따라가는 영상을 만들 수 있어요
           <span class="sub" id="mapEmptyNote">가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요</span>
         </div>
         <button class="btn secondary" type="button" id="btnGarminMap">가민 커넥트에서 가져오기</button>
@@ -752,14 +794,14 @@
           </button>
           <button class="btn secondary" id="btnMapFs">전체 화면 재생</button>
         </div>
-        <div class="hint" id="mapStatus">지도를 누르면 다시 재생돼요 · 출발·도착 가리기는 집 위치 노출을 막아줘요</div>
+        <div class="hint" id="mapStatus">지도를 누르면 다시 재생돼요 · 출발·도착 가리기는 집 위치가 드러나지 않게 해 줘요</div>
       </div>
     </div>
 
     <!-- 투명 PNG 패널 -->
     <div class="export-panel" id="panelPng">
-      <div class="panel-desc">사진 없이 기록만 투명 배경 PNG로 저장합니다.
-        <span class="sub">다른 이미지나 영상 위에 자유롭게 얹을 수 있어요 · 내용에 맞게 자동으로 잘립니다</span>
+      <div class="panel-desc">사진 없이 기록만 투명 배경 PNG로 저장해요
+        <span class="sub">다른 이미지나 영상 위에 자유롭게 얹을 수 있어요 · 기록 크기에 맞게 알아서 잘라 줘요</span>
       </div>
       <button class="btn" id="btnStatsPng">
         <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -769,8 +811,8 @@
 
     <!-- 카운트업 패널 -->
     <div class="export-panel" id="panelVideo">
-      <div class="panel-desc">빈 배경에서 숫자 카운트업 애니메이션만 재생합니다.
-        <span class="sub">검정·크로마키·흰색 배경 선택 · 화면 녹화를 시작한 뒤 ▶ 시작을 누르세요</span>
+      <div class="panel-desc">빈 배경에 숫자가 올라가는 애니메이션만 재생해요
+        <span class="sub">배경은 검정·크로마키·흰색 중에 고를 수 있어요 · 화면 녹화를 켜고 시작을 눌러 주세요</span>
       </div>
       <button class="btn" id="btnCapture">
         <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
@@ -781,8 +823,8 @@
     <!-- 사진 워터마크 패널 (기본) -->
     <div class="export-panel show" id="panelPhoto">
     <div class="drop" id="dropZone">
-      <strong>사진을 끌어다 놓거나 클릭해서 선택</strong><br>
-      기록이 워터마크처럼 사진 위에 새겨집니다
+      <strong>사진을 끌어다 놓거나 눌러서 골라 주세요</strong><br>
+      기록이 사진 위에 워터마크처럼 새겨져요
     </div>
     <input type="file" id="fileInput" accept="image/*" hidden>
     <div class="canvas-wrap" id="canvasWrap">
@@ -813,7 +855,7 @@
         <span class="seg">
           <button id="chipSplits">구간 표시</button>
         </span>
-        <button class="btn secondary" id="btnResetPos">위치 초기화</button>
+        <button class="btn secondary" id="btnResetPos">처음 위치로</button>
       </div>
       <div class="photo-controls">
         <button class="btn" id="btnSave">
@@ -844,11 +886,11 @@
 <!-- 가민 활동 선택 -->
 <div class="modal" id="gModal">
   <div class="modal-box">
-    <h2>가민 커넥트 — 활동 선택</h2>
+    <h2>불러올 활동을 골라 주세요</h2>
     <div class="g-list" id="gList"></div>
     <div class="row2">
       <button class="btn secondary" id="gClose">닫기</button>
-      <button class="btn secondary" id="gwLogout" style="display:none">연동 해제</button>
+      <button class="btn secondary" id="gwLogout" style="display:none">연결 끊기</button>
     </div>
   </div>
 </div>
@@ -870,7 +912,7 @@
       <input id="gwMfa" type="text" inputmode="numeric" placeholder="이메일/앱으로 받은 코드">
     </div>
     <div class="hint" id="gwStatus">
-      로그인 정보는 가민 서버로만 전달되고, 발급된 연동 토큰은 이 브라우저에만 저장됩니다.
+      로그인 정보는 가민 서버로만 보내고, 연결 정보는 이 브라우저에만 저장돼요
     </div>
     <div class="row2" style="margin-top:12px">
       <button class="btn secondary" id="gwCancel">취소</button>
@@ -890,7 +932,7 @@
     <button class="btn" id="capReplay">다시 재생</button>
     <button class="btn secondary" id="capClose">닫기 (ESC)</button>
   </div>
-  <div class="cap-stage" id="capStage" title="클릭하면 재생">
+  <div class="cap-stage" id="capStage" title="누르면 다시 재생돼요">
     <div class="cap-title" id="capTitle"></div>
     <div class="cap-dist"><span id="capDist">0.00</span><span class="unit">km</span></div>
     <div class="cap-row" id="capRow"></div>
@@ -899,13 +941,13 @@
     <svg class="icon" style="width:24px;height:24px;vertical-align:-5px;margin-right:6px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
     시작
   </button>
-  <button class="cap-reset hidden" id="capReset" title="0으로 초기화" aria-label="0으로 초기화">
+  <button class="cap-reset hidden" id="capReset" title="0부터 다시" aria-label="0부터 다시">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"></path>
       <polyline points="20.5 4.2 20.5 9.2 15.5 9.2"></polyline>
     </svg>
   </button>
-  <div class="cap-hint" id="capHint">먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요</div>
+  <div class="cap-hint" id="capHint">화면 녹화를 켜고 시작을 눌러 주세요</div>
 </div>
 
 <!-- 지도 여정 전체 화면 재생 (영상 저장이 안 되는 브라우저 · 화면 녹화용) -->
@@ -919,12 +961,12 @@
     <svg class="icon" style="width:24px;height:24px;vertical-align:-5px;margin-right:6px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
     시작
   </button>
-  <div class="cap-hint" id="mapFsHint">먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요</div>
+  <div class="cap-hint" id="mapFsHint">화면 녹화를 켜고 시작을 눌러 주세요</div>
 </div>
 
 <!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
      JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
-<script src="garmin-web.js?v=340879e7"></script>
+<script src="garmin-web.js?v=de20ef6b"></script>
 <script src="route-map.js?v=cefadc53"></script>
 <script>
 (() => {
@@ -1141,7 +1183,7 @@
     renderSplitsView();
     saveSettings();
     drawCanvas();
-    $('csvStatus').textContent = '기록을 초기화했어요. 새 기록을 입력하거나 불러오세요.';
+    $('csvStatus').textContent = '기록을 비웠어요. 새 기록을 입력하거나 가민에서 불러와 보세요';
   }
   $('btnReset').addEventListener('click', () => {
     if (confirm('입력된 기록을 모두 지울까요?')) resetRecord();
@@ -1277,7 +1319,7 @@
     if (!state.route || mapBusy) return;
     if (!RM.videoType()) {
       $('mapStatus').textContent = '이 브라우저는 영상 저장을 지원하지 않아요. 전체 화면 재생을 화면 녹화로 담아 주세요.';
-      openMapFs('이 브라우저는 영상 파일 저장을 지원하지 않아요 · 화면 녹화를 켠 뒤 시작을 누르세요');
+      openMapFs('이 브라우저는 영상 파일 저장을 지원하지 않아요 · 화면 녹화를 켜고 시작을 눌러 주세요');
       return;
     }
     mapBusy = true;
@@ -1289,13 +1331,13 @@
       const { blob, ext } = await RM.recordVideo({
         route: state.route, opt: mapOptions(), width, height,
         durationMs: mapDurationMs(), holdMs: 1500,
-        onProgress: f => { $('mapStatus').textContent = `영상 만드는 중… ${Math.round(f * 100)}% (화면을 켜 두세요)`; },
+        onProgress: f => { $('mapStatus').textContent = `영상 만드는 중… ${Math.round(f * 100)}% (화면이 켜져 있어야 해요)`; },
       });
       await saveBlob(blob, fileName('route-').replace(/\.png$/, '.' + ext));
       $('mapStatus').textContent = ext === 'mp4' ? '영상을 저장했어요 (MP4)'
         : '영상을 저장했어요 (WebM — 인스타에 올리려면 MP4 로 변환이 필요할 수 있어요)';
     } catch (e) {
-      $('mapStatus').textContent = `✕ 영상을 만들지 못했어요: ${e.message || e}`;
+      $('mapStatus').textContent = `✕ 영상을 만들지 못했어요. 다시 눌러 주세요 (${e.message || e})`;
     } finally {
       mapBusy = false;
       btn.disabled = false;
@@ -1327,7 +1369,7 @@
   function mapFsWait(hint) {
     if (mapFsR) { mapFsR.stop(); mapFsR.p = 0; mapFsR.draw(0); }
     $('mapFsStart').classList.remove('hidden');
-    $('mapFsHint').textContent = hint || '먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요';
+    $('mapFsHint').textContent = hint || '화면 녹화를 켜고 시작을 눌러 주세요';
   }
   async function mapFsPlay() {
     if (!mapFsR) return;
@@ -1400,9 +1442,9 @@
         applyRecord();
         $('csvStatus').textContent =
           `✓ ${file.name} — ${(route.totalM / 1000).toFixed(2)}km · ${fmtTime(route.movingS)}` +
-          `${laps.length > 1 ? ` · 구간 ${laps.length}개` : ''} 불러옴 · 값이 맞는지 확인하세요`;
+          `${laps.length > 1 ? ` · 구간 ${laps.length}개` : ''} 불러왔어요 · 값이 맞는지 확인해 주세요`;
       } else {
-        $('csvStatus').textContent = `△ ${file.name} — 시간 기록이 없는 경로예요. 시간을 입력하고 '기록 표시하기'를 눌러 주세요`;
+        $('csvStatus').textContent = `△ ${file.name} — 시간 기록이 없는 경로예요. 시간을 입력하고 '기록 보기'를 눌러 주세요`;
       }
       setRoute(route);
     } catch (e) {
@@ -1459,7 +1501,7 @@
       return;
     }
     $('csvStatus').textContent = location.protocol === 'https:'
-      ? '✕ 가민 연동을 사용할 수 없어요. 중계 서버 주소가 설정되지 않았습니다.'
+      ? '✕ 지금은 가민 연동을 쓸 수 없어요 (중계 서버 주소가 없어요)'
       : '✕ 연동 서버가 꺼져 있어요. 터미널에서 "python3 garmin_server.py" 를 실행한 뒤 다시 눌러 주세요.';
   });
 
@@ -1481,7 +1523,7 @@
     $('csvStatus').textContent = '';
     $('gwMfaField').style.display = 'none';
     $('gwMfa').value = '';
-    $('gwStatus').textContent = '로그인 정보는 가민 서버로만 전달되고, 발급된 연동 토큰은 이 브라우저에만 저장됩니다.';
+    $('gwStatus').textContent = '로그인 정보는 가민 서버로만 보내고, 연결 정보는 이 브라우저에만 저장돼요';
     $('gwModal').classList.add('show');
   }
   $('gwCancel').addEventListener('click', () => $('gwModal').classList.remove('show'));
@@ -1501,7 +1543,7 @@
         const r = await gw.login($('gwEmail').value.trim(), $('gwPw').value);
         if (r.mfa) {
           $('gwMfaField').style.display = '';
-          $('gwStatus').textContent = '인증 코드가 필요합니다. 이메일/인증 앱에서 코드를 확인해 입력해 주세요.';
+          $('gwStatus').textContent = '인증 코드를 입력해 주세요. 이메일이나 인증 앱으로 받은 코드예요';
           btn.disabled = false;
           return;
         }
@@ -1517,14 +1559,14 @@
   $('gwLogout').addEventListener('click', () => {
     if (gw) gw.logout();
     $('gModal').classList.remove('show');
-    $('csvStatus').textContent = '이 브라우저의 가민 연동을 해제했습니다.';
+    $('csvStatus').textContent = '이 브라우저의 가민 연결을 끊었어요';
   });
 
   function openGarminPicker(acts) {
     const list = $('gList');
     list.innerHTML = '';
     if (!acts.length) {
-      list.innerHTML = '<div class="hint">활동이 없습니다.</div>';
+      list.innerHTML = '<div class="hint">아직 가민에 기록된 활동이 없어요. 러닝을 마치고 다시 불러와 보세요</div>';
     }
     acts.forEach(a => {
       const b = document.createElement('button');
@@ -1577,7 +1619,7 @@
     } catch (e) { /* 구간 없이 진행 */ }
 
     $('gModal').classList.remove('show');
-    const head = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러옴`;
+    const head = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러왔어요`;
     $('csvStatus').textContent = `${head} · 지도 경로 받는 중…`;
 
     // GPS 경로 + 거리별 심박·케이던스를 먼저 받아 두고 기록을 표시한다
@@ -1599,7 +1641,7 @@
     applyRecord();
     if (route) setRoute(route);
     else $('mapEmptyNote').textContent = '이 활동은 GPS 경로가 없어요 (트레드밀·실내 러닝). 지도 여정은 야외에서 GPS 로 기록한 활동에서 만들 수 있어요';
-    $('csvStatus').textContent = route ? `${head} · 지도 여정 준비됨` : `${head} (GPS 경로 없음 — 기록·심박은 그대로 쓸 수 있어요)`;
+    $('csvStatus').textContent = route ? `${head} · 지도 여정도 만들었어요` : `${head} · GPS 경로가 없는 활동이라 기록만 채웠어요`;
   }
 
   // ---------- persistence ----------
@@ -2160,7 +2202,7 @@
     return out;
   }
   $('btnStatsPng').addEventListener('click', () => {
-    if (!(state.dist > 0)) { alert('먼저 기록을 입력하고 "기록 표시하기"를 눌러 주세요.'); return; }
+    if (!(state.dist > 0)) { alert('기록을 입력하고 "기록 보기"를 먼저 눌러 주세요'); return; }
     saveImage(makeStatsCanvas(), 'stats-');
   });
 
@@ -2193,14 +2235,14 @@
     capBuildRow();
     $('capStart').classList.remove('hidden');
     $('capReset').classList.add('hidden');
-    $('capHint').textContent = '먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요';
+    $('capHint').textContent = '화면 녹화를 켜고 시작을 눌러 주세요';
   }
   // 시작(또는 다시 재생): 카운트업 애니메이션 재생
   function capReplay() {
     capBuildRow();
     $('capStart').classList.add('hidden');
     $('capReset').classList.remove('hidden');
-    $('capHint').textContent = '화면을 클릭하면 다시 재생 · 아래 버튼으로 0으로 초기화';
+    $('capHint').textContent = '화면을 누르면 다시 재생돼요 · 아래 버튼을 누르면 0부터 다시 시작해요';
     animateStats('cap');
   }
   function wakeControls() {

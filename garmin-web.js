@@ -149,8 +149,8 @@
         method: 'POST', params: SIGNIN_PARAMS, referer,
         form: { username: email, password, embed: 'true', _csrf: csrf },
       });
-      if (r.status === 429) throw new Error('시도가 너무 많았습니다. 잠시 후 다시 해주세요.');
-      if (r.status === 401 || r.status === 403) throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
+      if (r.status === 429) throw new Error('로그인 시도가 많았어요. 잠시 후 다시 해 주세요');
+      if (r.status === 401 || r.status === 403) throw new Error('이메일이나 비밀번호를 다시 확인해 주세요');
       const title = (r.text.match(/<title>(.*?)<\/title>/i) || [])[1] || '';
       if (/MFA|verification/i.test(title) || /mfa-code/i.test(r.text)) {
         this.pendingMfa = { csrf: this._csrf(r.text), referer };
@@ -176,15 +176,15 @@
 
     _csrf(html) {
       const m = html.match(/name="_csrf"\s+value="(.+?)"/);
-      if (!m) throw new Error('로그인 페이지 분석 실패 (가민 측 변경 가능성)');
+      if (!m) throw new Error('가민 로그인 화면을 읽지 못했어요. 잠시 후 다시 해 주세요');
       return m[1];
     }
 
     async _finishLogin(html) {
       const m = html.match(/embed\?ticket=([^"]+)"/);
       if (!m) {
-        if (/locked|잠금/i.test(html)) throw new Error('계정이 잠겨 있습니다. 가민 웹사이트에서 확인해 주세요.');
-        throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
+        if (/locked|잠금/i.test(html)) throw new Error('계정이 잠겨 있어요. 가민 웹사이트에서 잠금을 풀어 주세요');
+        throw new Error('이메일이나 비밀번호를 다시 확인해 주세요');
       }
       const ticket = m[1];
       await this._loadConsumer();
@@ -199,9 +199,9 @@
       const pre = await this.req('connectapi.garmin.com', '/oauth-service/oauth/preauthorized', {
         params: preParams, ua: UA_API, auth: auth1,
       });
-      if (pre.status !== 200) throw new Error(`토큰 발급 실패 (${pre.status})`);
+      if (pre.status !== 200) throw new Error(`가민 연결을 만들지 못했어요 (${pre.status}). 다시 로그인해 주세요`);
       const kv = Object.fromEntries(pre.text.split('&').map(p => p.split('=').map(decodeURIComponent)));
-      if (!kv.oauth_token) throw new Error('토큰 응답 분석 실패');
+      if (!kv.oauth_token) throw new Error('가민 응답을 읽지 못했어요. 다시 로그인해 주세요');
       this.oauth1 = { token: kv.oauth_token, secret: kv.oauth_token_secret, mfaToken: kv.mfa_token || '' };
       this._save();
       await this._exchange();
@@ -216,8 +216,8 @@
         method: 'POST', form, ua: UA_API, auth,
       });
       if (r.status !== 200) {
-        if (r.status === 401) { this.logout(); throw new Error('연동이 만료되었습니다. 다시 로그인해 주세요.'); }
-        throw new Error(`토큰 교환 실패 (${r.status})`);
+        if (r.status === 401) { this.logout(); throw new Error('연결이 만료됐어요. 다시 로그인해 주세요'); }
+        throw new Error(`가민 연결을 새로 고치지 못했어요 (${r.status})`);
       }
       const t = JSON.parse(r.text);
       this.oauth2 = {
