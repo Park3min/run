@@ -213,6 +213,7 @@
 
   // ---------- 색 ----------
   const ACCENT = '#c8f542';
+  const kmFont = u => `800 ${u * 2.1}px "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", sans-serif`;
   // 빠름(연두) → 느림(빨강)
   const RAMP = [[200, 245, 66], [255, 214, 10], [255, 159, 10], [255, 69, 58]];
   const BUCKETS = 12;
@@ -300,6 +301,38 @@
         if (m < this.d0 || m > this.d1) continue;
         const pt = this._at(m);
         if (pt) this.kms.push({ m, km: m / 1000, x: pt.x, y: pt.y });
+      }
+      this._placeKms(u, W, H);
+    }
+
+    // km 표시가 서로(또는 출발·도착 점과) 겹치지 않게 자리 잡기.
+    // 같은 길을 여러 번 도는 코스는 길 옆으로 비켜 놓고, 끝내 자리가 없으면 생략한다.
+    _placeKms(u, W, H) {
+      const ctx = this.ctx, s = this.scr, h = u * 3.4, gap = u * 0.5;
+      ctx.font = kmFont(u);
+      const boxes = [s[0], s[s.length - 1]].map(p => ({ x: p.x, y: p.y, w: u * 2.6, h: u * 2.6 }));
+      const hit = b => boxes.some(o => Math.abs(b.x - o.x) * 2 < b.w + o.w + gap && Math.abs(b.y - o.y) * 2 < b.h + o.h + gap);
+      for (const k of this.kms) {
+        k.label = String(Math.round(k.km));
+        const w = Math.max(u * 3.6, ctx.measureText(k.label).width + u * 2.2);
+        // 진행 방향의 수직 방향으로 비켜 설 후보들
+        const a = this._at(k.m - 40), b = this._at(k.m + 40);
+        let dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+        const nx = -dy, ny = dx, off = Math.max(w, h) + gap * 1.5;
+        const cands = [[0, 0]];
+        for (const f of [1, -1]) cands.push([nx * off * f, ny * off * f]);
+        for (const f of [1, -1]) for (const g of [1, -1]) cands.push([(nx * f + dx * g) * off, (ny * f + dy * g) * off]);
+        for (const f of [1, -1]) cands.push([nx * off * 2 * f, ny * off * 2 * f]);
+        k.hidden = true;
+        for (const [ox, oy] of cands) {
+          const bx = { x: k.x + ox, y: k.y + oy, w, h };
+          if (bx.x - w / 2 < u || bx.x + w / 2 > W - u || bx.y - h / 2 < u || bx.y + h / 2 > H - u) continue;
+          if (hit(bx)) continue;
+          Object.assign(k, { lx: bx.x, ly: bx.y, w, hidden: false });
+          boxes.push(bx);
+          break;
+        }
       }
     }
 
@@ -430,15 +463,21 @@
       // km 표시
       if (this.opt.showKm) {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = `800 ${u * 2.1}px "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", sans-serif`;
-        for (const k of this.kms) {
-          if (k.m > this.d0 + (this.d1 - this.d0) * e + 1) continue;
-          const label = String(Math.round(k.km));
-          const w = Math.max(u * 3.6, ctx.measureText(label).width + u * 2.2), h = u * 3.4;
+        ctx.font = kmFont(u);
+        const h = u * 3.4;
+        const shown = this.kms.filter(k => !k.hidden && k.m <= this.d0 + (this.d1 - this.d0) * e + 1);
+        // 비켜 선 표시는 실제 지점과 가는 선·점으로 잇는다 (표시들 아래에 먼저 그림)
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.fillStyle = '#fff'; ctx.lineWidth = Math.max(1, u * 0.22);
+        for (const k of shown) {
+          if (k.lx === k.x && k.ly === k.y) continue;
+          ctx.beginPath(); ctx.moveTo(k.x, k.y); ctx.lineTo(k.lx, k.ly); ctx.stroke();
+          ctx.beginPath(); ctx.arc(k.x, k.y, u * 0.45, 0, Math.PI * 2); ctx.fill();
+        }
+        for (const k of shown) {
           ctx.fillStyle = 'rgba(13,13,13,0.86)';
-          ctx.beginPath(); ctx.roundRect(k.x - w / 2, k.y - h / 2, w, h, h / 2); ctx.fill();
+          ctx.beginPath(); ctx.roundRect(k.lx - k.w / 2, k.ly - h / 2, k.w, h, h / 2); ctx.fill();
           ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = Math.max(1, u * 0.18); ctx.stroke();
-          ctx.fillStyle = '#fff'; ctx.fillText(label, k.x, k.y + u * 0.1);
+          ctx.fillStyle = '#fff'; ctx.fillText(k.label, k.lx, k.ly + u * 0.1);
         }
       }
 
