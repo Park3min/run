@@ -514,8 +514,10 @@ void main(){
     // 메르카토르 (U, V) 의 해발 고도 (m). 아직 없으면 null (요청은 해 둔다)
     at(z, U, V) {
       const n = 2 ** z, fx = U * n, fy = V * n, tx = Math.floor(fx), ty = Math.floor(fy);
-      const t = this.tile(z, tx, ty);
+      const L = this._last;                 // 같은 타일을 연달아 찾는 경우가 대부분 — Map 조회 생략
+      const t = L && L.z === z && L.tx === tx && L.ty === ty ? L.t : this.tile(z, tx, ty);
       if (!t.ok) return null;
+      this._last = { z, tx, ty, t };
       const px = Math.max(0, Math.min(255, (fx - tx) * 256 - 0.5)), py = Math.max(0, Math.min(255, (fy - ty) * 256 - 0.5));
       const x0 = Math.floor(px), y0 = Math.floor(py), x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1);
       const ax = px - x0, ay = py - y0, h = t.h;
@@ -835,9 +837,10 @@ void main(){
         if (isFinite(mn)) tr.base = mn;
       }
       if (tr.base == null) { for (const p of this.scr) p.wz = 0; this._zMid = 0; return; }
-      let sum = 0;
-      for (const p of this.scr) { p.wz = terrainZ(tr, p.wx, p.wy); sum += p.wz; }
+      let sum = 0, mx = 0;
+      for (const p of this.scr) { p.wz = terrainZ(tr, p.wx, p.wy); sum += p.wz; mx = Math.max(mx, p.wz); }
       this._zMid = sum / this.scr.length;
+      this._zMax = mx;                                  // 경로 최고점 − 최저점 (m, 과장 포함)
     }
 
     _zAtD(m) {
@@ -888,6 +891,42 @@ void main(){
         if (p.ok) { p.x = (c.cx / c.cw + 1) / 2 * k.W; p.y = (1 - c.cy / c.cw) / 2 * k.H; }
       }
       this._k = k;
+      this._occlude(k);
+    }
+
+    // 언덕 뒤로 숨는 경로 점 찾기 — 카메라에서 점까지의 시선을 따라 지형 높이를 재어,
+    // 중간에 땅이 시선보다 높으면 가려진 것(hid). 지형이 없거나 평평하면 건너뛴다.
+    _occlude(k) {
+      const s = this.scr, tr = this.terrain;
+      const relief = tr && tr.on && tr.base != null && this._zMax > 8;
+      if (!relief) { for (const p of s) p.hid = false; return; }
+      const E = k.E, STEPS = 14, margin = 3 * TERRAIN_EXAG;
+      for (const p of s) {
+        p.hid = false;
+        if (!p.ok) continue;
+        const pz = p.wz || 0, dx = p.wx - E[0], dy = p.wy - E[1], dz = pz - E[2];
+        for (let i = 1; i < STEPS; i++) {
+          const t = i / STEPS;
+          if ((1 - t) * Math.hypot(dx, dy) < 25) break;             // 점 바로 앞(25m)은 제 땅이라 제외
+          const qz = E[2] + dz * t;
+          if (terrainZ(tr, E[0] + dx * t, E[1] + dy * t) > qz + margin) { p.hid = true; break; }
+        }
+      }
+      // 한두 점짜리 깜빡임 제거 — 앞뒤 둘 다 반대면 이웃을 따른다
+      for (let i = 1; i < s.length - 1; i++) {
+        if (s[i - 1].hid === s[i + 1].hid && s[i].hid !== s[i - 1].hid) s[i].hid = s[i - 1].hid;
+      }
+    }
+
+    // [from, to] 를 가려짐 여부가 같은 구간들로 나눔 (경계 점은 양쪽이 공유해 선이 끊기지 않게)
+    _runs(from, to) {
+      const s = this.scr, out = [];
+      let a = from;
+      for (let i = from + 1; i <= to; i++) {
+        if (!!s[i].hid !== !!s[a].hid) { out.push({ from: a, to: i, hid: !!s[a].hid }); a = i; }
+      }
+      if (to > a) out.push({ from: a, to, hid: !!s[a].hid });
+      return out;
     }
 
     // a(보이는 점)와 b(카메라 뒤) 사이에서 가까운 면에 닿는 화면 점
@@ -1028,7 +1067,7 @@ void main(){
       for (const k of list) {
         const pt = this._at(k.m);
         if (!pt || pt.x < 0 || pt.x > W || pt.y < 0 || pt.y > H) continue;
-        const b = { m: k.m, label: k.label, w: k.w, x: pt.x, y: pt.y, lx: pt.x, ly: pt.y };
+        const b = { m: k.m, label: k.label, w: k.w, x: pt.x, y: pt.y, lx: pt.x, ly: pt.y, hid: !!this.scr[pt.i].hid };
         if (out.some(o => Math.abs(o.lx - b.lx) * 2 < o.w + b.w && Math.abs(o.ly - b.ly) < h)) continue;
         out.push(b);
       }
@@ -1077,11 +1116,15 @@ void main(){
       const lw = Math.max(2, u * 0.95);
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
-      // 전체 경로 윤곽 (앞으로 달릴 길)
-      this._path(ctx, 0, s.length - 1);
+      // 전체 경로 윤곽 (앞으로 달릴 길) — 언덕에 가린 구간은 흐리게
+      const HID = 0.28;
       ctx.strokeStyle = st.light ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.16)';
       ctx.lineWidth = lw * 0.7;
-      ctx.stroke();
+      for (const r of this.is3d ? this._runs(0, s.length - 1) : [{ from: 0, to: s.length - 1, hid: false }]) {
+        ctx.globalAlpha = r.hid ? HID : 1;
+        this._path(ctx, r.from, r.to); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
 
       // 진행한 만큼
       const dNow = this.d0 + (this.d1 - this.d0) * e;
@@ -1089,19 +1132,21 @@ void main(){
       const upto = head ? head.i : 0;
 
       if (e > 0 && head) {
-        const segs = [];                    // [{from, to, b}] 같은 색끼리 묶음
+        const segs = [];                    // [{from, to, b, hid}] 같은 색·같은 가려짐끼리 묶음
         for (let i = 1; i <= upto; i++) {
-          const b = this.opt.color === 'pace' ? s[i].b : -1;
+          const b = this.opt.color === 'pace' ? s[i].b : -1, hid = !!s[i].hid;
           const lastSeg = segs[segs.length - 1];
-          if (lastSeg && lastSeg.b === b) lastSeg.to = i; else segs.push({ from: i - 1, to: i, b });
+          if (lastSeg && lastSeg.b === b && lastSeg.hid === hid) lastSeg.to = i; else segs.push({ from: i - 1, to: i, b, hid });
         }
         const stroke = (width, alpha, colorOf) => {
-          ctx.globalAlpha = alpha; ctx.lineWidth = width;
+          ctx.lineWidth = width;
           for (const g of segs) {
+            ctx.globalAlpha = alpha * (g.hid ? HID : 1);
             this._path(ctx, g.from, g.to);
             ctx.strokeStyle = colorOf(g.b); ctx.stroke();
           }
           // 마지막 점 → 머리까지 이어서
+          ctx.globalAlpha = alpha * (s[upto].hid ? HID : 1);
           if (!s[upto].ok) { ctx.globalAlpha = 1; return; }
           ctx.beginPath(); ctx.moveTo(s[upto].x, s[upto].y); ctx.lineTo(head.x, head.y);
           ctx.strokeStyle = colorOf(this.opt.color === 'pace' ? (s[Math.min(s.length - 1, upto + 1)].b) : -1);
@@ -1129,11 +1174,13 @@ void main(){
           ctx.beginPath(); ctx.arc(k.x, k.y, u * 0.45, 0, Math.PI * 2); ctx.fill();
         }
         for (const k of shown) {
+          ctx.globalAlpha = k.hid ? 0.35 : 1;           // 언덕에 가린 km 표시는 흐리게
           ctx.fillStyle = 'rgba(13,13,13,0.86)';
           ctx.beginPath(); ctx.roundRect(k.lx - k.w / 2, k.ly - h / 2, k.w, h, h / 2); ctx.fill();
           ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = Math.max(1, u * 0.18); ctx.stroke();
           ctx.fillStyle = '#fff'; ctx.fillText(k.label, k.lx, k.ly + u * 0.1);
         }
+        ctx.globalAlpha = 1;
       }
 
       // 출발 점
@@ -1142,9 +1189,12 @@ void main(){
         ctx.fillStyle = fill; ctx.fill();
         ctx.lineWidth = Math.max(1.5, r * 0.4); ctx.strokeStyle = ring; ctx.stroke();
       };
+      ctx.globalAlpha = s[0].hid ? HID : 1;
       if (s[0].ok) dot(s[0].x, s[0].y, u * 1.05, ACCENT, '#0d0d0d');
+      ctx.globalAlpha = s[s.length - 1].hid ? HID : 1;
       // 도착 점 (다 달렸을 때)
       if (e >= 1 && s[s.length - 1].ok) dot(s[s.length - 1].x, s[s.length - 1].y, u * 1.05, '#ffffff', '#0d0d0d');
+      ctx.globalAlpha = 1;
 
       // 달리는 머리 — 은은하게 맥박치는 빛
       if (head && e > 0 && e < 1) {
