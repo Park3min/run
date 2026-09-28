@@ -739,6 +739,7 @@
         <div class="photo-controls">
           <span class="seg"><button id="chipMapKm" class="on">km 표시</button></span>
           <span class="seg"><button id="chipMapTrim" class="on">출발·도착 200m 가리기</button></span>
+          <span class="seg" id="chipMapShadeWrap"><button id="chipMapShade" title="산·언덕의 높낮이를 그늘로 표시 (3D 는 항상 표시)">지형 음영</button></span>
         </div>
         <div class="photo-controls">
           <button class="btn" id="btnMapVideo">
@@ -924,7 +925,7 @@
 <!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
      JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
 <script src="garmin-web.js?v=340879e7"></script>
-<script src="route-map.js?v=04dba969"></script>
+<script src="route-map.js?v=cefadc53"></script>
 <script>
 (() => {
   'use strict';
@@ -940,7 +941,7 @@
     customPos: null, // {fx, fy} 블록 좌상단 (캔버스 비율)
     route: null,     // GPS 경로 (RouteMap.analyze 결과를 저장용으로 압축)
     series: null,    // 거리별 심박·케이던스 {hr:[], cad:[]} (경로 없는 실내 러닝도)
-    map: { view: '2d', style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true },
+    map: { view: '2d', style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true, shade: false },
   };
 
   const $ = id => document.getElementById(id);
@@ -1164,6 +1165,7 @@
       color: state.map.color,
       trimM: state.map.trim ? 200 : 0,
       showKm: state.map.km,
+      shade: !!state.map.shade,
       overlay: {
         title: state.title,
         sub: state.showDate ? fmtDateWhen() : '',
@@ -1231,6 +1233,7 @@
   bindMapSeg('mapSpeedSeg', 'speed', Number);
   $('chipMapKm').addEventListener('click', () => { state.map.km = !state.map.km; syncMapControls(); saveSettings(); renderMapPanel(false); });
   $('chipMapTrim').addEventListener('click', () => { state.map.trim = !state.map.trim; syncMapControls(); saveSettings(); renderMapPanel(false); });
+  $('chipMapShade').addEventListener('click', () => { state.map.shade = !state.map.shade; syncMapControls(); saveSettings(); renderMapPanel(false); });
 
   function syncMapControls() {
     const on = (id, v) => [...$(id).children].forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
@@ -1242,6 +1245,8 @@
     [...$('mapSpeedSeg').children].forEach(b => { b.textContent = `${+b.dataset.v * (is3dView() ? 2 : 1)}초`; });
     $('chipMapKm').classList.toggle('on', state.map.km);
     $('chipMapTrim').classList.toggle('on', state.map.trim);
+    $('chipMapShade').classList.toggle('on', !!state.map.shade);
+    $('chipMapShadeWrap').style.display = is3dView() ? 'none' : '';   // 3D 는 지형 음영이 늘 들어간다
   }
 
   // 3D 는 카메라가 움직이는 만큼 두 배로 천천히 — 빠르면 보는 사람이 어지럽다
