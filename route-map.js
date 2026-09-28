@@ -538,6 +538,50 @@ void main(){
     },
   };
 
+  // ---------- 2D 지형 음영 ----------
+  // 고도 타일 한 장 → 음영 캔버스. 그늘은 검정, 해를 받는 면은 흰색을 반투명으로 얹어
+  // 다크·라이트·컬러·지도 없음 어디에나 자연스럽다. 해는 북서쪽 45° (지도 음영의 관례).
+  const shadeCache = new Map();
+  const SUN = [-0.5, 0.5, Math.SQRT1_2];            // 동·북·위 성분
+  function hillshade(z, tx, ty, fx) {
+    const key = `${z}/${tx}/${ty}/${fx}`;
+    if (shadeCache.has(key)) return shadeCache.get(key);
+    const t = DEM.tile(z, tx, ty);
+    if (!t.ok) return null;
+    const n = 2 ** z, lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ty + 0.5) / n)));
+    const mpp = 40075016.686 * Math.cos(lat) / (256 * n);        // 한 픽셀의 실제 m
+    const ex = 2.0;                                               // 완만한 도시 언덕도 보이게 과장
+    const [sa, ha] = fx === 'dark' ? [0.75, 0.30] : fx === 'none' ? [0.7, 0.22] : [0.4, 0.3];   // 밝은 지도는 그늘이 도드라져 약하게
+    const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+    const g = c.getContext('2d'), img = g.createImageData(256, 256), d = img.data;
+    // 고도를 가로·세로 5칸 평균으로 먼저 다듬는다 — 계단 무늬와 건물 높이 얼룩을 없앤다
+    const blur = (src, dx, dy) => {
+      const out = new Float32Array(65536);
+      for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+        let a = 0;
+        for (let k = -2; k <= 2; k++) a += src[Math.max(0, Math.min(255, y + k * dy)) * 256 + Math.max(0, Math.min(255, x + k * dx))];
+        out[y * 256 + x] = a / 5;
+      }
+      return out;
+    };
+    const h = blur(blur(t.h, 1, 0), 0, 1);
+    const H = (x, y) => h[Math.max(0, Math.min(255, y)) * 256 + Math.max(0, Math.min(255, x))];
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+      // 기울기는 ±2칸 간격으로 재 매끄럽게 (도심의 건물·잡음 때문에 생기는 얼룩을 줄인다)
+      const dzx = (H(x + 2, y) - H(x - 2, y)) / (4 * mpp) * ex;
+      const dzy = (H(x, y - 2) - H(x, y + 2)) / (4 * mpp) * ex;    // 북쪽(위)이 +
+      const hs = (-dzx * SUN[0] - dzy * SUN[1] + SUN[2]) / Math.hypot(dzx, dzy, 1);
+      const k = (y * 256 + x) * 4, raw = hs - SUN[2];
+      const dd = Math.sign(raw) * Math.max(0, Math.abs(raw) - 0.035);   // 아주 약한 기울기는 무시 (평지는 깨끗하게)
+      if (dd < 0) { d[k] = d[k + 1] = d[k + 2] = 0; d[k + 3] = Math.min(255, -dd * sa * 600); }
+      else { d[k] = d[k + 1] = d[k + 2] = 255; d[k + 3] = Math.min(255, dd * ha * 600); }
+    }
+    g.putImageData(img, 0, 0);
+    shadeCache.set(key, c);
+    if (shadeCache.size > 60) shadeCache.delete(shadeCache.keys().next().value);
+    return c;
+  }
+
   // 지면 좌표(m) → 그려질 높이 z (m, 과장 포함). terrain: {geo, on}
   function terrainZ(tr, x, y) {
     if (!tr || !tr.on) return 0;
@@ -691,7 +735,7 @@ void main(){
       this.cv = canvas;
       this.ctx = canvas.getContext('2d');
       this.route = null;
-      this.opt = { style: 'dark', color: 'pace', trimM: 200, showKm: true, overlay: null, transparent: false };
+      this.opt = { style: 'dark', color: 'pace', trimM: 200, showKm: true, shade: false, overlay: null, transparent: false };
       this.p = 1;
       this._pending = new Set();
       this._raf = 0;
@@ -983,20 +1027,37 @@ void main(){
     _drawTiles(ctx) {
       const st = STYLES[this.opt.style] || STYLES.dark;
       const { W, H, scale, cu, cv, cx, cy } = this.view;
-      if (!(this.opt.transparent && !st.url)) { ctx.fillStyle = st.bg; ctx.fillRect(0, 0, W, H); }
-      if (!st.url) return;
+      const transparent = this.opt.transparent && !st.url;
+      if (!transparent) { ctx.fillStyle = st.bg; ctx.fillRect(0, 0, W, H); }
       // 256px 타일을 화면에 150~300px 로 — 거의 축소만 해서 선명하게 (OSM 최대 19)
       const zi = Math.max(0, Math.min(19, Math.ceil(Math.log2(scale / 300))));
-      const n = 2 ** zi;
       const uL = cu - cx / scale, uR = cu + (W - cx) / scale;
       const vT = cv - cy / scale, vB = cv + (H - cy) / scale;
-      const X = t => Math.round(cx + (t / n - cu) * scale), Y = t => Math.round(cy + (t / n - cv) * scale);
-      for (let ty = Math.max(0, Math.floor(vT * n)); ty <= Math.min(n - 1, Math.floor(vB * n)); ty++) {
-        for (let tx = Math.floor(uL * n); tx <= Math.floor(uR * n); tx++) {
-          const t = getTile(this.opt.style, zi, tx, ty);
-          if (t.ok) ctx.drawImage(t.src, X(tx), Y(ty), X(tx + 1) - X(tx), Y(ty + 1) - Y(ty));
-          else if (!t.failed) this._wait(t);
+      const eachTile = (z, fn) => {
+        const n = 2 ** z;
+        const X = t => Math.round(cx + (t / n - cu) * scale), Y = t => Math.round(cy + (t / n - cv) * scale);
+        for (let ty = Math.max(0, Math.floor(vT * n)); ty <= Math.min(n - 1, Math.floor(vB * n)); ty++) {
+          for (let tx = Math.floor(uL * n); tx <= Math.floor(uR * n); tx++) fn(tx, ty, X(tx), Y(ty), X(tx + 1) - X(tx), Y(ty + 1) - Y(ty));
         }
+      };
+      if (st.url) {
+        eachTile(zi, (tx, ty, x, y, w, h) => {
+          const t = getTile(this.opt.style, zi, tx, ty);
+          if (t.ok) ctx.drawImage(t.src, x, y, w, h);
+          else if (!t.failed) this._wait(t);
+        });
+      }
+      // 지형 음영 — 고도 원자료(≈30m, z12)보다 자세할 필요가 없어 지도보다 세 단계 거친 줌
+      if (this.opt.shade && !transparent) {
+        const zd = Math.max(8, Math.min(12, zi - 3));
+        ctx.save();
+        ctx.imageSmoothingQuality = 'high';
+        eachTile(zd, (tx, ty, x, y, w, h) => {
+          const c = hillshade(zd, tx, ty, st.url ? st.fx || 'color' : 'none');
+          if (c) ctx.drawImage(c, x, y, w, h);
+          else { const t = DEM.tile(zd, tx, ty); if (!t.failed) this._wait(t); }
+        });
+        ctx.restore();
       }
     }
 
