@@ -58,14 +58,14 @@
     color: var(--ink);
     font-family: var(--font);
     min-height: 100vh;
-    padding: calc(24px + var(--safe-top)) calc(20px + var(--safe-right)) calc(48px + var(--safe-bottom)) calc(20px + var(--safe-left));
+    padding: calc(20px + var(--safe-top)) calc(20px + var(--safe-right)) calc(96px + var(--safe-bottom)) calc(20px + var(--safe-left));
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
   }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .wrap { max-width: 960px; margin: 0 auto; }
 
-  header { margin-bottom: 28px; }
+  header { margin-bottom: 18px; }
   header h1 {
     font-size: 26px; font-weight: 800; letter-spacing: -0.02em;
     display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
@@ -79,13 +79,59 @@
   header h1 .by .handle { color: var(--ink-2); }
   header p { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
-  .grid {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 20px;
-    align-items: start;
+  /* ---- 단계 진행 ----
+     한 번에 한 단계만 — 긴 스크롤 없이 [다음 단계]로 넘어간다. 폭은 모바일 기준(최대 560px). */
+  .wrap { max-width: 560px; }
+  .stepper {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    margin-bottom: 16px;
   }
-  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .stepper button {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: none; border: none; border-bottom: 2px solid var(--border);
+    color: var(--muted); font-family: var(--font); font-size: 13px; font-weight: 700;
+    padding: 8px 2px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .stepper button b {
+    width: 20px; height: 20px; border-radius: 50%; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface-2); color: var(--muted); font-size: 11px;
+  }
+  .stepper button.done { color: var(--ink-2); }
+  .stepper button.done b { background: var(--accent-soft); color: var(--accent-text); }
+  .stepper button.on { color: var(--ink); border-bottom-color: var(--accent); }
+  .stepper button.on b { background: var(--accent); color: var(--accent-ink); }
+  .step[hidden] { display: none; }
+
+  /* 접기·펼치기 줄 */
+  .fold-btn {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+    color: var(--ink); font-family: var(--font); text-align: left;
+    padding: 12px 14px; margin: 4px 0 14px; cursor: pointer;
+  }
+  .fold-btn.plain { background: none; border: none; border-radius: 0; padding: 4px 0; margin: 12px 0 4px; }
+  .fold-btn .fold-title { display: block; font-size: 14px; font-weight: 700; }
+  .fold-btn .fold-sub { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+  .fold-btn .fold-sub:empty { display: none; }
+  .fold-chev { color: var(--muted); transition: transform 0.2s ease; }
+  .fold-btn[aria-expanded="true"] .fold-chev { transform: rotate(180deg); }
+  .splits .fold-btn.plain { margin: 0; }
+  .load-note { font-size: 13px; color: var(--accent-text); font-weight: 600; margin-top: -8px; line-height: 1.5; }
+  #splitsView { margin-top: 10px; }
+
+  /* 아래 고정 버튼 (토스 하단 CTA 형태) — 홈 인디케이터 위로 */
+  .step-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    padding: 20px calc(20px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(20px + var(--safe-left));
+    background: linear-gradient(to bottom, transparent, var(--page) 38%);
+    pointer-events: none;
+  }
+  .step-bar-in { max-width: 560px; margin: 0 auto; display: flex; gap: 8px; pointer-events: auto; }
+  .step-bar .btn { flex: 1; padding: 15px 16px; font-size: 16px; border-radius: 14px; }
+  .step-bar .btn.secondary { flex: 0 0 34%; }
+  .step-bar .btn[hidden] { display: none; }
+  .step-bar .btn.secondary:only-child, .step-bar .btn.secondary.solo { flex: 1; }
 
   .card {
     background: var(--surface);
@@ -295,7 +341,7 @@
   }
 
   /* [3] 내보내기 탭 */
-  .export-card { margin-top: 20px; }
+  .export-card { margin-top: 0; }
   .export-tabs { display: flex; width: 100%; margin-bottom: 16px; }
   /* .seg button 과 우선순위가 같아 뒤에 오는 규칙에 덮이지 않도록 .seg.export-tabs 로 지정 */
   .seg.export-tabs button {
@@ -310,12 +356,14 @@
 
   /* 지도 여정 */
   .map-stage {
-    position: relative; margin: 0 auto; max-width: 560px;
+    position: relative; margin: 0 auto; max-width: 100%;
     border-radius: 14px; overflow: hidden;
     border: 1px solid var(--border); background: #101010;
   }
-  .map-stage[data-aspect="4:5"] { max-width: 480px; }
-  .map-stage[data-aspect="9:16"] { max-width: 340px; }
+  /* 한 화면에 미리보기와 저장 버튼이 함께 보이도록 화면 높이에 맞춰 줄인다 */
+  .map-stage { max-width: min(100%, calc(100vh - 400px)); max-width: min(100%, calc(100svh - 400px)); }
+  .map-stage[data-aspect="4:5"] { max-width: min(480px, calc((100vh - 400px) * 0.8)); max-width: min(480px, calc((100svh - 400px) * 0.8)); }
+  .map-stage[data-aspect="9:16"] { max-width: min(340px, calc((100vh - 370px) * 0.5625)); max-width: min(340px, calc((100svh - 370px) * 0.5625)); }
   .map-stage canvas { display: block; width: 100%; height: auto; cursor: pointer; }
   .map-play {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -337,7 +385,9 @@
     .seg.export-tabs button { flex: 1 1 auto; min-width: 0; font-size: 11px; padding: 11px 3px; letter-spacing: -0.03em; }
     .seg.export-tabs button .icon { display: none; }
   }
-  #mapStatus { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  #mapStatus { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .photo-controls.map-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .photo-controls.map-actions .btn { width: 100%; padding: 13px 10px; }
 
   /* ---- splits ---- */
   .splits { display: none; }
@@ -532,6 +582,18 @@
   #mapFsStart { bottom: auto; top: 50%; transform: translate(-50%, -50%); }
   #mapFsStart:active { transform: translate(-50%, -50%) scale(0.97); }
   #mapFsHint { bottom: auto; top: calc(50% + 48px); text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
+  @media (max-width: 480px) {
+    /* 2단계가 한 화면에 들어오도록 통계 카드를 촘촘하게 */
+    .stats { gap: 12px; }
+    .hero { padding: 16px 18px 18px; }
+    .hero .value { font-size: 52px; }
+    .tiles { gap: 10px; }
+    .tile { padding: 12px 14px; }
+    .tile .value { font-size: 23px; }
+    .tile[data-metric="pace"] { padding: 12px 14px; }
+    .tile[data-metric="pace"] .value { font-size: 28px; }
+    .splits { padding: 14px 18px; }
+  }
 </style>
 </head>
 <body>
@@ -546,14 +608,21 @@
       <span class="name">러닝로그</span>
       <span class="by">by 빠르크 <span class="handle">@pki_runner</span></span>
     </h1>
-    <p>러닝 기록을 입력하면 카운트업 애니메이션으로 표시하고, 사진 위에 기록을 얹어 저장할 수 있어요.</p>
+    <p id="introText">러닝 기록을 불러와 숫자가 올라가는 애니메이션으로 보고, 사진·지도 영상으로 저장할 수 있어요.</p>
   </header>
 
-  <div class="grid">
-    <!-- 입력 -->
+  <!-- 단계 표시 — 한 번에 한 단계만 보여 줘 긴 스크롤 없이 진행 -->
+  <nav class="stepper" id="stepper" aria-label="진행 단계">
+    <button type="button" data-step="1"><b>1</b>불러오기</button>
+    <button type="button" data-step="2"><b>2</b>기록 확인</button>
+    <button type="button" data-step="3"><b>3</b>내보내기</button>
+  </nav>
+
+  <!-- 1단계: 불러오기 (입력 칸은 접어 두고 '직접 입력·고치기'로 펼침) -->
+  <section class="step" id="step1">
     <div class="card">
       <div class="card-head">
-        <h2>기록 입력</h2>
+        <h2>기록 불러오기</h2>
         <button type="button" id="btnReset" class="reset-btn">
           <svg class="icon" style="width:13px;height:13px;vertical-align:-2px" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           초기화
@@ -574,8 +643,14 @@
         </div>
         <button type="button" class="link-btn" id="btnGpx" title="가민 커넥트·스트라바 웹에서 내려받은 경로 파일">GPX · TCX 파일로 불러오기</button>
         <input type="file" id="gpxInput" accept=".gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml,application/xml,text/xml" hidden>
-        <div class="hint" id="csvStatus">가민에서 불러오면 기록과 지도 경로가 한 번에 채워져요. 아래에서 바로 고칠 수 있어요</div>
+        <div class="hint" id="csvStatus">가민에서 불러오면 기록과 지도 경로가 한 번에 채워져요</div>
       </div>
+
+      <button type="button" class="fold-btn" id="formToggle" aria-expanded="false" aria-controls="formFold">
+        <span><span class="fold-title">기록 직접 입력·고치기</span><span class="fold-sub" id="recSummary"></span></span>
+        <svg class="icon fold-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="fold" id="formFold" hidden>
 
       <div class="field">
         <label for="inDist">총 거리 (km)</label>
@@ -667,16 +742,20 @@
           <button type="button" class="mchip" data-metric="elev">상승 고도</button>
         </div>
       </div>
-      <button class="btn" id="btnApply">기록 보기</button>
+      <button class="btn" id="btnApply" hidden>기록 보기</button>
+      </div>
     </div>
+  </section>
 
-    <!-- 스탯 -->
+  <!-- 2단계: 기록 확인 -->
+  <section class="step" id="step2" hidden>
     <div class="stats">
       <!-- [7] 입력 화면으로 돌아가기 -->
       <button type="button" class="back-link" id="btnEdit">
         <svg class="icon" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
         기록 고치기
       </button>
+      <p class="load-note" id="loadNote" hidden></p>
       <div class="hero">
         <div class="label">총 거리</div>
         <div class="value"><span id="stDist">0.00</span><span class="unit">km</span></div>
@@ -704,13 +783,17 @@
         </div>
       </div>
       <div class="card splits" id="splitsCard">
-        <h2>구간 기록</h2>
-        <div id="splitsView"></div>
+        <button type="button" class="fold-btn plain" id="splitsToggle" aria-expanded="false" aria-controls="splitsView">
+          <span><span class="fold-title">구간 기록</span><span class="fold-sub" id="splitsSummary"></span></span>
+          <svg class="icon fold-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="splitsView" hidden></div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- [3] 내보내기 — 옵션을 탭으로 -->
+  <!-- 3단계: 내보내기 — 옵션을 탭으로 -->
+  <section class="step" id="step3" hidden>
   <div class="card export-card">
     <div class="card-head">
       <h2>내보내기</h2>
@@ -750,6 +833,11 @@
             <svg class="icon" style="width:30px;height:30px" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4" fill="currentColor"/></svg>
           </button>
         </div>
+        <button type="button" class="fold-btn plain" id="mapOptToggle" aria-expanded="false" aria-controls="mapOptFold">
+          <span><span class="fold-title">보기 옵션</span><span class="fold-sub" id="mapOptSummary"></span></span>
+          <svg class="icon fold-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="fold" id="mapOptFold" hidden>
         <div class="photo-controls">
           <span class="seg" id="mapViewSeg">
             <button data-v="2d" class="on">2D</button>
@@ -783,7 +871,8 @@
           <span class="seg"><button id="chipMapTrim" class="on">출발·도착 200m 가리기</button></span>
           <span class="seg" id="chipMapShadeWrap"><button id="chipMapShade" title="산·언덕의 높낮이를 그늘로 표시 (3D 는 항상 표시)">지형 음영</button></span>
         </div>
-        <div class="photo-controls">
+        </div>
+        <div class="photo-controls map-actions">
           <button class="btn" id="btnMapVideo">
             <svg class="icon" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
             영상 저장
@@ -792,8 +881,8 @@
             <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             이미지 저장
           </button>
-          <button class="btn secondary" id="btnMapFs">전체 화면 재생</button>
         </div>
+        <button type="button" class="link-btn" id="btnMapFs">전체 화면으로 재생하기 (화면 녹화용)</button>
         <div class="hint" id="mapStatus">지도를 누르면 다시 재생돼요 · 출발·도착 가리기는 집 위치가 드러나지 않게 해 줘요</div>
       </div>
     </div>
@@ -833,6 +922,11 @@
         <svg class="icon" style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/></svg>
         사진 위의 기록 블록을 드래그하면 원하는 위치로 옮길 수 있어요.
       </div>
+      <button type="button" class="fold-btn plain" id="photoOptToggle" aria-expanded="false" aria-controls="photoOptFold">
+        <span><span class="fold-title">꾸미기 옵션</span><span class="fold-sub">스타일 · 위치 · 정렬 · 날짜·구간 표시</span></span>
+        <svg class="icon fold-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="fold" id="photoOptFold" hidden>
       <div class="photo-controls">
         <span class="seg" id="styleSeg">
           <button data-style="gradient" class="on">그라데이션</button>
@@ -857,6 +951,7 @@
         </span>
         <button class="btn secondary" id="btnResetPos">처음 위치로</button>
       </div>
+      </div>
       <div class="photo-controls">
         <button class="btn" id="btnSave">
           <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -872,6 +967,15 @@
         </button>
       </div>
     </div>
+    </div>
+  </div>
+  </section>
+
+  <!-- 아래 고정 버튼 — 이전 / 다음 단계 -->
+  <div class="step-bar" id="stepBar">
+    <div class="step-bar-in">
+      <button type="button" class="btn secondary" id="stepPrev">이전 단계</button>
+      <button type="button" class="btn" id="stepNext">다음 단계</button>
     </div>
   </div>
 
@@ -1109,6 +1213,7 @@
     if (!state.splits.length) { card.classList.remove('show'); return; }
     card.classList.add('show');
     const fastest = Math.min(...state.splits);
+    $('splitsSummary').textContent = `${state.splits.length}구간 · 가장 빠른 구간 ${fmtPace(fastest)}`;
     const labels = state.lapLabels && state.lapLabels.length === state.splits.length
       ? state.lapLabels : null;
     state.splits.forEach((sec, i) => {
@@ -1131,7 +1236,7 @@
     const seconds = parseTime($('inTime').value);
     if (!(dist > 0) || seconds === null || seconds <= 0) {
       alert('거리와 시간을 확인해 주세요.');
-      return;
+      return false;
     }
     state.dist = dist;
     state.seconds = seconds;
@@ -1151,9 +1256,64 @@
     saveSettings();
     drawCanvas();
     refreshMap();
+    updateRecSummary();
     if ($('capOverlay').classList.contains('show')) capReplay();
+    return true;
   }
   $('btnApply').addEventListener('click', applyRecord);
+
+  // ---------- 단계 진행 (1 불러오기 → 2 기록 확인 → 3 내보내기) ----------
+  let step = 1;
+  function setFold(btn, open) {
+    btn.setAttribute('aria-expanded', String(open));
+    $(btn.getAttribute('aria-controls')).hidden = !open;
+  }
+  const foldToggle = id => $(id).addEventListener('click', () => setFold($(id), $(id).getAttribute('aria-expanded') !== 'true'));
+  ['formToggle', 'splitsToggle', 'mapOptToggle', 'photoOptToggle'].forEach(foldToggle);
+
+  // 접힌 입력 칸 위에 지금 기록을 한 줄로
+  function updateRecSummary() {
+    const parts = state.dist > 0 ? [`${fmtDist(state.dist)}km`, fmtTime(state.seconds), state.title].filter(Boolean) : [];
+    $('recSummary').textContent = parts.length ? `지금 기록 · ${parts.join(' · ')}` : '';
+  }
+
+  function goStep(n, opt = {}) {
+    if (n > 1 && !(state.dist > 0)) n = 1;
+    const prev = step;
+    step = n;
+    [1, 2, 3].forEach(i => { $('step' + i).hidden = i !== n; });
+    [...$('stepper').children].forEach(b => {
+      const i = +b.dataset.step;
+      b.classList.toggle('on', i === n);
+      b.classList.toggle('done', i < n);
+      if (i === n) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+    $('introText').hidden = n !== 1;
+    $('stepPrev').hidden = n === 1;
+    $('stepNext').hidden = n === 3;
+    $('stepPrev').classList.toggle('solo', n === 3);
+    if (opt.edit) {
+      setFold($('formToggle'), true);
+      setTimeout(() => { try { $('inDist').focus({ preventScroll: true }); } catch (e) { $('inDist').focus(); } }, 50);
+    }
+    if (prev !== n) window.scrollTo(0, 0);
+    $('loadNote').hidden = !(n === 2 && opt.note);
+    if (opt.note) $('loadNote').textContent = opt.note;
+    if (n === 2 && prev !== 2) animateStats('st');
+    if (n === 3 && prev !== 3) renderMapPanel(!!state.route);   // 지도는 보일 때 크기를 재고 재생
+    if (n !== 3 && mapR) mapR.stop();
+  }
+  $('stepper').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const n = +b.dataset.step;
+    if (n > 1 && step === 1 && !applyRecord()) return;          // 1단계 입력을 반영한 뒤 이동
+    goStep(n);
+  });
+  $('stepNext').addEventListener('click', () => {
+    if (step === 1 && !applyRecord()) return;
+    goStep(Math.min(3, step + 1));
+  });
+  $('stepPrev').addEventListener('click', () => goStep(Math.max(1, step - 1)));
 
   // ---------- 초기화 ----------
   const todayISO = () => {
@@ -1233,7 +1393,8 @@
     $('mapEmpty').hidden = has;
     $('mapWrap').hidden = !has;
     if (!has) { if (mapR) mapR.stop(); return; }
-    if (!$('panelMap').classList.contains('show')) return;   // 숨겨진 탭은 폭을 모르니 열릴 때 그린다
+    // 숨겨진 탭·단계는 폭을 모르니 보일 때 그린다
+    if (!$('panelMap').classList.contains('show') || $('step3').hidden) { if (mapR) mapR.stop(); return; }
     const [aw, ah] = MAP_ASPECTS[state.map.aspect] || MAP_ASPECTS['1:1'];
     const stage = $('mapStage'), cv = $('mapCanvas');
     stage.dataset.aspect = state.map.aspect;
@@ -1255,7 +1416,7 @@
 
   // 기록 숫자·제목이 바뀌면 지도 오버레이도 맞춘다 (재생 중이면 다음 재생부터)
   function refreshMap() {
-    if (!mapR || !state.route || !$('panelMap').classList.contains('show')) return;
+    if (!mapR || !state.route || !$('panelMap').classList.contains('show') || $('step3').hidden) return;
     mapR.set(state.route, mapOptions());
     if (!mapR._playing) mapR.draw(mapR.p);
   }
@@ -1285,6 +1446,8 @@
     on('mapColorSeg', state.map.color);
     on('mapSpeedSeg', state.map.speed);
     [...$('mapSpeedSeg').children].forEach(b => { b.textContent = `${+b.dataset.v * (is3dView() ? 2 : 1)}초`; });
+    const label = id => ([...$(id).children].find(b => b.classList.contains('on')) || {}).textContent || '';
+    $('mapOptSummary').textContent = [label('mapViewSeg'), label('mapStyleSeg'), label('mapAspectSeg'), label('mapSpeedSeg')].filter(Boolean).join(' · ');
     $('chipMapKm').classList.toggle('on', state.map.km);
     $('chipMapTrim').classList.toggle('on', state.map.trim);
     $('chipMapShade').classList.toggle('on', !!state.map.shade);
@@ -1439,12 +1602,14 @@
 
       state.series = route.series || null;
       if (route.movingS) {
-        applyRecord();
+        const ok = applyRecord();
         $('csvStatus').textContent =
           `✓ ${file.name} — ${(route.totalM / 1000).toFixed(2)}km · ${fmtTime(route.movingS)}` +
           `${laps.length > 1 ? ` · 구간 ${laps.length}개` : ''} 불러왔어요 · 값이 맞는지 확인해 주세요`;
+        if (ok) setTimeout(() => goStep(2, { note: $('csvStatus').textContent }), 0);
       } else {
-        $('csvStatus').textContent = `△ ${file.name} — 시간 기록이 없는 경로예요. 시간을 입력하고 '기록 보기'를 눌러 주세요`;
+        $('csvStatus').textContent = `△ ${file.name} — 시간 기록이 없는 경로예요. 시간을 입력하고 '다음 단계'를 눌러 주세요`;
+        setFold($('formToggle'), true);
       }
       setRoute(route);
     } catch (e) {
@@ -1638,10 +1803,11 @@
         state.series = RM.attachSeries({ totalM: a.distanceKm * 1000 }, series).series;
       }
     } catch (e) { /* 경로 없이 진행 */ }
-    applyRecord();
+    const ok = applyRecord();
     if (route) setRoute(route);
     else $('mapEmptyNote').textContent = '이 활동은 GPS 경로가 없어요 (트레드밀·실내 러닝). 지도 여정은 야외에서 GPS 로 기록한 활동에서 만들 수 있어요';
     $('csvStatus').textContent = route ? `${head} · 지도 여정도 만들었어요` : `${head} · GPS 경로가 없는 활동이라 기록만 채웠어요`;
+    if (ok) goStep(2, { note: $('csvStatus').textContent });
   }
 
   // ---------- persistence ----------
@@ -1828,10 +1994,7 @@
   });
 
   // ---------- [7] 수정하기 → 입력 폼으로 ----------
-  $('btnEdit').addEventListener('click', () => {
-    document.querySelector('.grid > .card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setTimeout(() => { try { $('inDist').focus({ preventScroll: true }); } catch (e) { $('inDist').focus(); } }, 420);
-  });
+  $('btnEdit').addEventListener('click', () => goStep(1, { edit: true }));
   $('metricChips').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const k = b.dataset.metric;
@@ -2202,7 +2365,7 @@
     return out;
   }
   $('btnStatsPng').addEventListener('click', () => {
-    if (!(state.dist > 0)) { alert('기록을 입력하고 "기록 보기"를 먼저 눌러 주세요'); return; }
+    if (!(state.dist > 0)) { alert('기록을 먼저 입력해 주세요'); return; }
     saveImage(makeStatsCanvas(), 'stats-');
   });
 
@@ -2311,7 +2474,7 @@
     b3.disabled = true; b3.title = '이 브라우저는 3D 보기를 지원하지 않아요';
   }
   syncMapControls();
-  renderMapPanel(false);
+  goStep(1);
   // 창 크기가 바뀌면 지도 미리보기 해상도를 다시 맞춘다
   let mapResizeT = 0;
   window.addEventListener('resize', () => {
