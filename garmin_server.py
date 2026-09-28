@@ -158,15 +158,28 @@ def get_splits(activity_id: str) -> list:
     return out
 
 
-def get_route(activity_id: str) -> list:
-    """GPS 경로 [{lat, lon, t}] — 실내 활동처럼 경로가 없으면 빈 배열."""
-    d = client.get_activity_details(activity_id, maxchart=10, maxpoly=3000) or {}
+def get_route(activity_id: str) -> dict:
+    """GPS 경로 [{lat, lon, t}] + 거리별 심박·케이던스 [{d, hr, cad}].
+    실내 활동처럼 경로가 없으면 route 는 빈 배열."""
+    d = client.get_activity_details(activity_id, maxchart=600, maxpoly=3000) or {}
     pl = (d.get("geoPolylineDTO") or {}).get("polyline") or []
-    return [
+    route = [
         {"lat": p["lat"], "lon": p["lon"], "t": p.get("time")}
         for p in pl
         if p.get("valid", True) and p.get("lat") is not None and p.get("lon") is not None
     ]
+    idx = {m.get("key"): m.get("metricsIndex") for m in d.get("metricDescriptors") or []}
+    series = []
+    if "sumDistance" in idx:
+        for row in d.get("activityDetailMetrics") or []:
+            v = row.get("metrics") or []
+            at = lambda k: v[idx[k]] if k in idx and idx[k] < len(v) else None
+            cad = at("directDoubleCadence")
+            if cad is None and at("directRunCadence") is not None:
+                cad = at("directRunCadence") * 2
+            if at("sumDistance") is not None:
+                series.append({"d": at("sumDistance"), "hr": at("directHeartRate"), "cad": cad})
+    return {"route": route, "series": series}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -226,7 +239,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"splits": get_splits(activity_id)})
             elif url.path.startswith("/activity/") and url.path.endswith("/route"):
                 activity_id = url.path.split("/")[2]
-                self._send(200, {"route": get_route(activity_id)})
+                self._send(200, get_route(activity_id))
             elif url.path == "/ping":
                 self._send(200, {"ok": True})
             else:

@@ -4,6 +4,8 @@
  * - GPX·TCX 파싱, 경로 분석(거리·이동시간·1km 구간·평균 심박/케이던스)
  * - 캔버스 지도 렌더러: OpenStreetMap 타일(웹 메르카토르) 위에 진행률만큼 경로를 그린다.
  *   타일이 CORS 를 허용해 캔버스가 오염되지 않으므로 PNG·영상으로 그대로 저장할 수 있다.
+ * - 3D 보기: 달리는 방향을 따라가는 기울어진 카메라 (WebGL 로 지면을 그리고 2D 캔버스에 합성)
+ * - 거리별 심박·케이던스 곡선 — 애니메이션에서 그 지점의 값을 보여 주고 끝에 평균으로
  * - 영상 녹화: canvas.captureStream + MediaRecorder (MP4 우선, 안 되면 WebM)
  *
  * 외부 의존성 없음. window.RouteMap 으로 노출.
@@ -72,7 +74,7 @@
   function analyze(raw) {
     const hasTime = raw.filter(p => p.t != null && isFinite(p.t)).length >= raw.length * 0.8;
     const useDm = raw.filter(p => p.dm != null).length >= raw.length * 0.8;   // TCX 기기 측정 거리 우선
-    const pts = [];
+    const pts = [], samples = [];
     let d = 0, mt = 0, last = null;
     for (const p of raw) {
       if (last) {
@@ -84,20 +86,67 @@
         if (dt != null && !(dt > 20 && seg / dt < 0.5)) mt += dt;
       }
       pts.push({ lat: p.lat, lon: p.lon, d, mt });
+      if (p.hr > 0 || p.cad > 0) samples.push({ d, hr: p.hr, cad: p.cad });
       last = p;
     }
     const avg = a => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : null);
     const hr = avg(raw.map(p => p.hr).filter(v => v > 0));
     let cad = avg(raw.map(p => p.cad).filter(v => v > 0));
-    if (cad && cad < 120) cad *= 2;       // GPX·TCX 는 보통 한쪽 발 기준(rpm) → 분당 걸음 수
+    const cadMul = cad && cad < 120 ? 2 : 1;   // GPX·TCX 는 보통 한쪽 발 기준(rpm) → 분당 걸음 수
+    if (cad) cad *= cadMul;
     const first = raw.find(p => p.t != null);
-    return {
+    const route = {
       pts, totalM: d, hasTime,
       movingS: hasTime ? Math.round(mt) : null,
       startT: hasTime && first ? first.t : null,
       avgHr: hr ? Math.round(hr) : null,
       avgCad: cad ? Math.round(cad) : null,
     };
+    if (samples.length > 10) attachSeries(route, samples, cadMul);
+    return route;
+  }
+
+  // ---------- 거리별 심박·케이던스 ----------
+  // samples [{d, hr, cad}] (d 는 누적 거리, 단위·척도 무관) → 거리 비율 0~1 을 SERIES_N 칸으로 나눈
+  // 부드러운 곡선 route.series = {hr:[…], cad:[…]}. 애니메이션에서 '지금 이 지점의 심박'을 보여준다.
+  const SERIES_N = 200;
+  function attachSeries(route, samples, cadMul = 1) {
+    const dMax = samples.reduce((m, s) => Math.max(m, s.d || 0), 0);
+    if (!(dMax > 0)) return route;
+    const build = (key, mul) => {
+      const sum = new Float64Array(SERIES_N + 1), cnt = new Float64Array(SERIES_N + 1);
+      let n = 0;
+      for (const s of samples) {
+        const v = s[key];
+        if (!(v > 0)) continue;
+        const i = Math.round(Math.min(1, Math.max(0, s.d / dMax)) * SERIES_N);
+        sum[i] += v * mul; cnt[i]++; n++;
+      }
+      if (n < 10) return null;
+      // 빈 칸은 앞뒤 값으로 메우고, 약 150m 폭으로 이동 평균 (순간 튐 제거)
+      const raw = Array.from(sum, (v, i) => (cnt[i] ? v / cnt[i] : null));
+      let lastV = raw.find(v => v != null);
+      for (let i = 0; i <= SERIES_N; i++) { if (raw[i] == null) raw[i] = lastV; else lastV = raw[i]; }
+      const w = Math.max(1, Math.round(SERIES_N * 150 / Math.max(route.totalM || dMax, 1)));
+      return raw.map((_, i) => {
+        let a = 0, c = 0;
+        for (let j = Math.max(0, i - w); j <= Math.min(SERIES_N, i + w); j++) { a += raw[j]; c++; }
+        return Math.round(a / c);
+      });
+    };
+    route.series = { hr: build('hr', 1), cad: build('cad', cadMul) };
+    return route;
+  }
+
+  // 진행률 e(0~1)의 심박·케이던스 — 달리는 동안은 그 지점의 값, 마지막 3% 에서 평균으로 모인다.
+  // 반환 {v, avg:bool}. 곡선이 없으면 처음부터 평균 (0 에서 세어 올라가는 오해를 막는다)
+  function liveMetric(arr, avg, e) {
+    if (!avg) return null;
+    if (!arr || !arr.length || e >= 1) return { v: avg, avg: true };
+    const x = Math.max(0, e) * (arr.length - 1), i = Math.floor(x), f = x - i;
+    const cur = arr[i] + ((arr[Math.min(arr.length - 1, i + 1)] - arr[i]) * f);
+    const k = Math.min(1, Math.max(0, (e - 0.97) / 0.03)), s = k * k * (3 - 2 * k);
+    return { v: Math.round(cur + (avg - cur) * s), avg: e >= 0.97 };
   }
 
   // 누적 거리 dm 지점의 누적 이동시간 (선형 보간)
@@ -153,7 +202,7 @@
   };
   const ATTRIBUTION = '© OpenStreetMap contributors';
   const tileCache = new Map();          // 삽입 순서 = 오래된 순 → 넘치면 앞에서부터 버린다
-  const TILE_CACHE_MAX = 220;
+  const TILE_CACHE_MAX = 420;          // 3D 는 카메라가 지나가는 길의 타일을 미리 받아 둔다
 
   // 색 변환 (CSS filter 와 같은 행렬): 다크 = invert → hue-rotate(180°) → 채도·밝기 낮춤.
   // 반전 후 색상을 180° 돌리면 물은 푸른 톤, 공원은 초록 톤으로 돌아오고 글씨는 밝아진다.
@@ -225,6 +274,257 @@
 
   const easeInOut = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
+  // ---------- 3D 지면 (WebGL) ----------
+  // 기울어진 카메라로 본 지도 바닥을 WebGL 로 그린 뒤 2D 캔버스에 옮겨 담는다(영상 녹화·PNG 저장이
+  // 그대로 동작). 모든 렌더러가 GL 캔버스 하나와 텍스처 캐시를 함께 쓴다 — 브라우저의 WebGL
+  // 컨텍스트 수 제한(보통 16개)에 걸리지 않게. 다크·라이트 색 변환은 셰이더에서 한다.
+  const VS = `attribute vec2 aPos; attribute vec2 aUV;
+uniform mat4 uM; varying vec2 vUV; varying float vDepth; varying vec2 vW;
+void main(){ vec4 c = uM * vec4(aPos, 0.0, 1.0); gl_Position = c; vUV = aUV; vDepth = c.w; vW = aPos; }`;
+  const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform sampler2D uTex; uniform int uFx; uniform float uGrid; uniform vec3 uBg; uniform vec2 uFog;
+varying vec2 vUV; varying float vDepth; varying vec2 vW;
+void main(){
+  vec3 c;
+  if (uGrid > 0.5) {
+    vec2 g = abs(fract(vW / 100.0 - 0.5) - 0.5) * 100.0;
+    float lw = max(0.6, vDepth * 0.0016);
+    float a = 1.0 - smoothstep(lw * 0.5, lw, min(g.x, g.y));
+    c = mix(uBg, vec3(1.0), a * 0.10);
+  } else {
+    c = texture2D(uTex, vUV).rgb;
+    if (uFx == 1) {
+      c = 1.0 - c;
+      c = mat3(-0.574, 0.426, 0.426, 1.430, 0.430, 1.430, 0.144, 0.144, -0.856) * c;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = (l + (c - l) * 0.45) * 0.78;
+    } else if (uFx == 2) {
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = (l + (c - l) * 0.12) * 1.04;
+    }
+    c = clamp(c, 0.0, 1.0);
+  }
+  gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vDepth)), 1.0);
+}`;
+
+  const GL3D = {
+    _state: 0,                    // 0 미확인, 1 사용 가능, -1 불가
+    tex: new Map(),               // key → {tex} (삽입 순서 = LRU)
+    TEX_MAX: 320,
+    ok() {
+      if (this._state === 0) {
+        try { this._init(); this._state = 1; } catch (e) { this._state = -1; }
+      }
+      return this._state === 1;
+    },
+    _init() {
+      const cv = document.createElement('canvas');
+      const gl = cv.getContext('webgl', { preserveDrawingBuffer: true, antialias: true, alpha: false })
+        || cv.getContext('experimental-webgl', { preserveDrawingBuffer: true, alpha: false });
+      if (!gl) throw new Error('no webgl');
+      const sh = (type, src) => {
+        const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o);
+        if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o));
+        return o;
+      };
+      const pr = gl.createProgram();
+      gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS));
+      gl.linkProgram(pr);
+      if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+      gl.useProgram(pr);
+      this.cv = cv; this.gl = gl; this.pr = pr;
+      this.loc = {};
+      for (const n of ['uM', 'uTex', 'uFx', 'uGrid', 'uBg', 'uFog']) this.loc[n] = gl.getUniformLocation(pr, n);
+      this.aPos = gl.getAttribLocation(pr, 'aPos'); this.aUV = gl.getAttribLocation(pr, 'aUV');
+      this.buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.enableVertexAttribArray(this.aPos); gl.enableVertexAttribArray(this.aUV);
+      gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 16, 0);
+      gl.vertexAttribPointer(this.aUV, 2, gl.FLOAT, false, 16, 8);
+      this.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+      gl.uniform1i(this.loc.uTex, 0);
+    },
+    // 원본 OSM 타일 → 텍스처 (없으면 요청만 하고 null + 대기 목록에 추가)
+    texFor(z, x, y, pending) {
+      const n = 2 ** z, xx = ((x % n) + n) % n, key = `${z}/${xx}/${y}`;
+      let e = this.tex.get(key);
+      if (e) { this.tex.delete(key); this.tex.set(key, e); return e.tex; }
+      const t = getTile('color', z, xx, y);
+      if (!t.ok) { if (!t.failed && pending) pending.push(t); return null; }
+      const gl = this.gl, tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, t.src);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      if (this.aniso) gl.texParameterf(gl.TEXTURE_2D, this.aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+        Math.min(8, gl.getParameter(this.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+      this.tex.set(key, { tex });
+      while (this.tex.size > this.TEX_MAX) {
+        const k0 = this.tex.keys().next().value;
+        gl.deleteTexture(this.tex.get(k0).tex); this.tex.delete(k0);
+      }
+      return tex;
+    },
+    /**
+     * 지면 그리기. cam: 카메라(행렬·타일 목록 포함), style: STYLES 키.
+     * 준비 안 된 타일은 조상 타일의 일부를 늘려 대신 보여 주고, pending 에 모은다.
+     */
+    render(W, H, cam, style, pending) {
+      const gl = this.gl, st = STYLES[style] || STYLES.dark;
+      if (this.cv.width !== W || this.cv.height !== H) { this.cv.width = W; this.cv.height = H; }
+      gl.viewport(0, 0, W, H);
+      const bg = hexRgb(st.bg);
+      gl.clearColor(bg[0], bg[1], bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(this.pr);
+      gl.uniformMatrix4fv(this.loc.uM, false, cam.mat);
+      gl.uniform3f(this.loc.uBg, bg[0], bg[1], bg[2]);
+      gl.uniform2f(this.loc.uFog, cam.fog[0], cam.fog[1]);
+      gl.uniform1i(this.loc.uFx, st.fx === 'dark' ? 1 : st.fx === 'light' ? 2 : 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.activeTexture(gl.TEXTURE0);
+      if (!st.url) {                                  // 지도 없음 — 은은한 100m 격자
+        gl.uniform1f(this.loc.uGrid, 1);
+        const r = cam.D * 12, cx = cam.tx, cy = cam.ty;
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([cx - r, cy - r, 0, 0, cx + r, cy - r, 0, 0, cx - r, cy + r, 0, 0, cx + r, cy + r, 0, 0]), gl.STREAM_DRAW);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        return this.cv;
+      }
+      gl.uniform1f(this.loc.uGrid, 0);
+      for (const t of cam.tiles) {
+        let tex = this.texFor(t.z, t.x, t.y, pending), u0 = 0, v0 = 0, us = 1;
+        for (let k = 1; !tex && k <= 6 && t.z - k >= 0; k++) {       // 조상 타일로 임시 표시
+          const m = 2 ** k;
+          tex = this.texFor(t.z - k, Math.floor(t.x / m), Math.floor(t.y / m), null);
+          if (tex) { us = 1 / m; u0 = (((t.x % m) + m) % m) / m; v0 = (t.y % m) / m; }
+        }
+        if (!tex) continue;
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        const [x0, y0, x1, y1] = t.rect;
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          // 이미지 첫 줄(v0)이 북쪽(y1)
+          x0, y0, u0, v0 + us, x1, y0, u0 + us, v0 + us, x0, y1, u0, v0, x1, y1, u0 + us, v0,
+        ]), gl.STREAM_DRAW);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+      return this.cv;
+    },
+  };
+  const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+
+  // ---------- 3D 카메라 ----------
+  const FOV = 40 * rad, TY = Math.tan(FOV / 2);
+  const smooth = t => t * t * (3 - 2 * t);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const lerpAng = (a, b, t) => { let d = ((b - a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; return a + d * t; };
+
+  /**
+   * 카메라 {tx, ty(바라보는 지면 점, m), beta(방위, 북=0 시계방향), pitch(0=수직으로 내려다봄), D(거리), oy(화면 세로 치우침)}
+   * → 투영에 필요한 값들. 지면 좌표: x 동쪽, y 북쪽, z 위 (m).
+   */
+  function camBasis(c, W, H) {
+    const sb = Math.sin(c.beta), cb = Math.cos(c.beta), sp = Math.sin(c.pitch), cp = Math.cos(c.pitch);
+    const h = [sb, cb, 0], r = [cb, -sb, 0];
+    const f = [h[0] * sp, h[1] * sp, -cp];                 // 바라보는 방향
+    const u = [h[0] * cp, h[1] * cp, sp];                  // 화면 위쪽
+    const E = [c.tx - f[0] * c.D, c.ty - f[1] * c.D, -f[2] * c.D];
+    const TX = TY * W / H;
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const rE = dot(r, E), uE = dot(u, E), fE = dot(f, E);
+    // clip = (r·q/TX, u·q/TY + oy·(f·q), 0, f·q),  q = p − E   (열 우선 4x4)
+    const m = new Float32Array(16);
+    m[0] = r[0] / TX; m[4] = r[1] / TX; m[8] = r[2] / TX; m[12] = -rE / TX;
+    m[1] = u[0] / TY + c.oy * f[0]; m[5] = u[1] / TY + c.oy * f[1]; m[9] = u[2] / TY + c.oy * f[2]; m[13] = -uE / TY - c.oy * fE;
+    m[3] = f[0]; m[7] = f[1]; m[11] = f[2]; m[15] = -fE;
+    return Object.assign({}, c, { r, u, f, E, TX, mat: m, W, H, near: c.D * 0.02, fog: [c.D * 1.9, c.D * 4.6] });
+  }
+
+  // 지면 점 → 동차 좌표 {cx, cy, cw}
+  function camClip(k, x, y) {
+    const m = k.mat;
+    return { cx: m[0] * x + m[4] * y + m[12], cy: m[1] * x + m[5] * y + m[13], cw: m[3] * x + m[7] * y + m[15] };
+  }
+  const clipToScreen = (k, c) => ({ x: (c.cx / c.cw + 1) / 2 * k.W, y: (1 - c.cy / c.cw) / 2 * k.H });
+
+  // 화면 가장자리 광선이 땅에 닿는 곳 → 보이는 지면 범위
+  function camFootprint(k) {
+    const pts = [];
+    const far = k.fog[1] * 1.1;
+    for (let i = 0; i <= 4; i++) for (const [sx, sy] of [[i / 4, 0], [i / 4, 1], [0, i / 4], [1, i / 4]]) {
+      const nx = sx * 2 - 1, ny = 1 - sy * 2;
+      const d = [0, 1, 2].map(j => k.f[j] + k.r[j] * nx * k.TX + k.u[j] * (ny - k.oy) * TY);
+      let t = d[2] < -1e-4 ? -k.E[2] / d[2] : Infinity;
+      const len = Math.hypot(d[0], d[1], d[2]);
+      t = Math.min(t, far / len);
+      pts.push([k.E[0] + d[0] * t, k.E[1] + d[1] * t]);
+    }
+    pts.push([k.E[0], k.E[1]]);
+    return pts;
+  }
+
+  /**
+   * 보이는 타일 고르기 — 가까운 곳은 자세한 줌, 먼 곳은 거친 줌(사지 트리).
+   * geo: {cu, cv, C} 지면 좌표 ↔ 메르카토르 변환.
+   */
+  function camTiles(k, geo, maxTiles = 150) {
+    const fp = camFootprint(k);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [x, y] of fp) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const toU = x => geo.cu + x / geo.C, toV = y => geo.cv - y / geo.C;
+    const span = Math.max(x1 - x0, y1 - y0);
+    const z0 = Math.max(1, Math.min(16, Math.floor(Math.log2(geo.C / span))));
+    const tileRect = (z, tx, ty) => {
+      const n = 2 ** z;
+      return [(tx / n - geo.cu) * geo.C, -((ty + 1) / n - geo.cv) * geo.C, ((tx + 1) / n - geo.cu) * geo.C, -(ty / n - geo.cv) * geo.C];
+    };
+    const focal = (k.H / 2) / TY;
+    const sizeOf = rect => {                       // 화면에서의 대략 크기(px)
+      const nx = Math.max(rect[0], Math.min(k.E[0], rect[2])), ny = Math.max(rect[1], Math.min(k.E[1], rect[3]));
+      const dist = Math.hypot(nx - k.E[0], ny - k.E[1], k.E[2]);
+      return (rect[2] - rect[0]) * focal / dist;
+    };
+    const visible = rect => {
+      const cs = [[rect[0], rect[1]], [rect[2], rect[1]], [rect[0], rect[3]], [rect[2], rect[3]]].map(([x, y]) => camClip(k, x, y));
+      if (cs.every(c => c.cw <= k.near)) return false;
+      if (cs.some(c => c.cw <= k.near)) return true;
+      const ss = cs.map(c => clipToScreen(k, c));
+      if (ss.every(s => s.x < 0) || ss.every(s => s.x > k.W) || ss.every(s => s.y < 0) || ss.every(s => s.y > k.H)) return false;
+      // 안개 너머(완전히 배경색)는 건너뜀
+      const nx = Math.max(rect[0], Math.min(k.E[0], rect[2])), ny = Math.max(rect[1], Math.min(k.E[1], rect[3]));
+      return Math.hypot(nx - k.E[0], ny - k.E[1]) < k.fog[1] * 1.05;
+    };
+    const n0 = 2 ** z0;
+    let list = [];
+    for (let tx = Math.floor(toU(x0) * n0); tx <= Math.floor(toU(x1) * n0); tx++) {
+      for (let ty = Math.max(0, Math.floor(toV(y1) * n0)); ty <= Math.min(n0 - 1, Math.floor(toV(y0) * n0)); ty++) {
+        const rect = tileRect(z0, tx, ty);
+        if (visible(rect)) list.push({ z: z0, x: tx, y: ty, rect, s: sizeOf(rect) });
+      }
+    }
+    // 화면에서 가장 크게 보이는 타일부터 4조각으로 나눈다
+    for (let guard = 0; guard < 400; guard++) {
+      let bi = -1;
+      // 보통은 z17 까지, 발밑처럼 아주 크게 보이는 곳만 z18 (타일 수·서버 부담을 줄인다)
+      const need = t => (t.z < 17 && t.s > 480) || (t.z < 18 && t.s > 820);
+      for (let i = 0; i < list.length; i++) if (need(list[i]) && (bi < 0 || list[i].s > list[bi].s)) bi = i;
+      if (bi < 0 || list.length + 3 > maxTiles) break;
+      const t = list[bi];
+      list.splice(bi, 1);
+      for (let j = 0; j < 4; j++) {
+        const z = t.z + 1, tx = t.x * 2 + (j & 1), ty = t.y * 2 + (j >> 1), rect = tileRect(z, tx, ty);
+        if (visible(rect)) list.push({ z, x: tx, y: ty, rect, s: sizeOf(rect) });
+      }
+    }
+    list.sort((a, b) => a.z - b.z);
+    return list;
+  }
+
   // ---------- 렌더러 ----------
   class Renderer {
     constructor(canvas) {
@@ -280,15 +580,20 @@
       const q = f => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * f))];
       const pLo = sorted.length ? q(0.1) : 0, pHi = sorted.length ? q(0.9) : 1;
 
-      // 화면 좌표 + 1.5px 미만 간격 점은 합쳐서 가볍게
+      // 화면 좌표 + 1.5px 미만 간격 점은 합쳐서 가볍게 (3D 는 확대해 보므로 모두 유지)
+      // 3D 용 지면 좌표(m): x 동쪽, y 북쪽 — 경로 중심 기준
+      this.is3d = this.opt.view === '3d' && GL3D.ok();
+      const C = 40075016.686 * Math.cos(Math.atan(Math.sinh(Math.PI * (1 - 2 * cvv))));
+      this.geo = { cu, cv: cvv, C };
       const scr = [];
       vis.forEach((p, i) => {
-        const x = cx + (mercX(p.lon) - cu) * scale, y = cy + (mercY(p.lat) - cvv) * scale;
+        const mx = mercX(p.lon), my = mercY(p.lat);
+        const x = cx + (mx - cu) * scale, y = cy + (my - cvv) * scale;
         const lastS = scr[scr.length - 1];
-        if (lastS && i < vis.length - 1 && Math.hypot(x - lastS.x, y - lastS.y) < 1.5) return;
+        if (!this.is3d && lastS && i < vis.length - 1 && Math.hypot(x - lastS.x, y - lastS.y) < 1.5) return;
         let b = 0;
         if (pace[i] > 0 && pHi > pLo) b = Math.round(Math.max(0, Math.min(1, (pace[i] - pLo) / (pHi - pLo))) * (BUCKETS - 1));
-        scr.push({ x, y, d: p.d, b });
+        scr.push({ x, y, d: p.d, b, wx: (mx - cu) * C, wy: -(my - cvv) * C, ok: true });
       });
       this.scr = scr;
       this.d0 = scr[0].d;
@@ -303,6 +608,86 @@
         if (pt) this.kms.push({ m, km: m / 1000, x: pt.x, y: pt.y });
       }
       this._placeKms(u, W, H);
+      if (this.is3d) this._setup3d(total, W, H);
+    }
+
+    // ---------- 3D: 달리는 방향을 따라가는 카메라 ----------
+    // 시작: 위에서 내려다본 전체 경로 → 출발점으로 내려앉으며 기울어짐 → 진행 방향을 앞에 두고
+    // 따라 달림 → 도착 후 비스듬히 전체 경로를 보여 주며 끝.
+    _setup3d(total, W, H) {
+      const s = this.scr, d0 = this.d0, d1 = this.d1;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const p of s) { x0 = Math.min(x0, p.wx); x1 = Math.max(x1, p.wx); y0 = Math.min(y0, p.wy); y1 = Math.max(y1, p.wy); }
+      const hasOv = !!this.opt.overlay;
+      const fracH = hasOv ? 0.53 : 0.84, fracW = 0.84;
+      const TX = TY * W / H;
+      const fit = Math.max((y1 - y0) / (2 * TY * fracH), (x1 - x0) / (2 * TX * fracW), 150);
+      const ovOy = hasOv ? 1 - 2 * 0.435 : 0;
+      this.cam3 = {
+        top: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 0, D: fit, oy: ovOy },
+        end: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 42 * rad, D: fit * 1.12, oy: ovOy },
+        followD: Math.min(1800, Math.max(300, total * 0.12)) / (2 * TY),
+      };
+      // 진행 방향 — 앞뒤 구간의 방향을 거리 기준으로 양방향 지수 평활 (급회전에 멀미 나지 않게)
+      const N = 400, step = (d1 - d0) / N, L = Math.max(200, total * 0.05), a = Math.min(1, step / L);
+      const dl = Math.max(30, total * 0.008);
+      const dirs = [];
+      for (let i = 0; i <= N; i++) {
+        const d = d0 + step * i, p = this._atW(Math.max(d0, d - dl)), q = this._atW(Math.min(d1, d + dl));
+        const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+        dirs.push([(q.x - p.x) / len, (q.y - p.y) / len]);
+      }
+      const pass = arr => { const out = [arr[0].slice()]; for (let i = 1; i < arr.length; i++) out.push([lerp(out[i - 1][0], arr[i][0], a), lerp(out[i - 1][1], arr[i][1], a)]); return out; };
+      const fwd = pass(dirs), bwd = pass(dirs.slice().reverse()).reverse();
+      this.bear = fwd.map((v, i) => Math.atan2(v[0] + bwd[i][0], v[1] + bwd[i][1]));
+    }
+
+    _atW(m) {
+      const s = this.scr;
+      if (m <= s[0].d) return { x: s[0].wx, y: s[0].wy };
+      if (m >= s[s.length - 1].d) return { x: s[s.length - 1].wx, y: s[s.length - 1].wy };
+      let lo = 0, hi = s.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (s[mid].d <= m) lo = mid; else hi = mid; }
+      const A = s[lo], B = s[hi], f = B.d > A.d ? (m - A.d) / (B.d - A.d) : 0;
+      return { x: A.wx + (B.wx - A.wx) * f, y: A.wy + (B.wy - A.wy) * f };
+    }
+
+    // 진행률 p → {카메라, e(경로 진행 0~1)}
+    _cam(p) {
+      const INTRO = 0.1, OUTRO = 0.14, c3 = this.cam3;
+      const e = easeInOut(Math.max(0, Math.min(1, (p - INTRO) / (1 - INTRO - OUTRO))));
+      const follow = ee => {
+        const h = this._atW(this.d0 + (this.d1 - this.d0) * ee);
+        const x = ee * (this.bear.length - 1), i = Math.floor(x), f = x - i;
+        const beta = lerpAng(this.bear[i], this.bear[Math.min(this.bear.length - 1, i + 1)], f);
+        return { tx: h.x, ty: h.y, beta, pitch: 58 * rad, D: c3.followD, oy: -0.12 };
+      };
+      const mix = (A, B, t) => ({
+        tx: lerp(A.tx, B.tx, t), ty: lerp(A.ty, B.ty, t), beta: lerpAng(A.beta, B.beta, t),
+        pitch: lerp(A.pitch, B.pitch, t), D: Math.exp(lerp(Math.log(A.D), Math.log(B.D), t)), oy: lerp(A.oy, B.oy, t),
+      });
+      let cam;
+      if (p < INTRO) cam = mix(c3.top, follow(0), smooth(Math.max(0, p) / INTRO));
+      else if (p > 1 - OUTRO) cam = mix(follow(1), c3.end, smooth(Math.min(1, (p - 1 + OUTRO) / OUTRO)));
+      else cam = follow(e);
+      return { cam: camBasis(cam, this.view.W, this.view.H), e };
+    }
+
+    // 경로 점들을 카메라로 투영 (뒤로 넘어간 점은 ok=false)
+    _project3d(k) {
+      for (const p of this.scr) {
+        const c = camClip(k, p.wx, p.wy);
+        p.cx = c.cx; p.cy = c.cy; p.cw = c.cw; p.ok = c.cw > k.near;
+        if (p.ok) { p.x = (c.cx / c.cw + 1) / 2 * k.W; p.y = (1 - c.cy / c.cw) / 2 * k.H; }
+      }
+      this._k = k;
+    }
+
+    // a(보이는 점)와 b(카메라 뒤) 사이에서 가까운 면에 닿는 화면 점
+    _clipPt(a, b) {
+      const n = this._k.near, t = (a.cw - n) / (a.cw - b.cw);
+      const cx = a.cx + (b.cx - a.cx) * t, cy = a.cy + (b.cy - a.cy) * t;
+      return { x: (cx / n + 1) / 2 * this._k.W, y: (1 - cy / n) / 2 * this._k.H };
     }
 
     // km 표시가 서로(또는 출발·도착 점과) 겹치지 않게 자리 잡기.
@@ -340,11 +725,12 @@
     _at(m) {
       const s = this.scr;
       if (!s || !s.length) return null;
-      if (m <= s[0].d) return { x: s[0].x, y: s[0].y, i: 0 };
-      if (m >= s[s.length - 1].d) return { x: s[s.length - 1].x, y: s[s.length - 1].y, i: s.length - 1 };
+      if (m <= s[0].d) return s[0].ok ? { x: s[0].x, y: s[0].y, i: 0 } : null;
+      if (m >= s[s.length - 1].d) return s[s.length - 1].ok ? { x: s[s.length - 1].x, y: s[s.length - 1].y, i: s.length - 1 } : null;
       let lo = 0, hi = s.length - 1;
       while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (s[mid].d <= m) lo = mid; else hi = mid; }
       const a = s[lo], b = s[hi], f = b.d > a.d ? (m - a.d) / (b.d - a.d) : 0;
+      if (!a.ok || !b.ok) return null;                 // 3D: 카메라 뒤
       return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, i: lo };
     }
 
@@ -386,6 +772,17 @@
     // 모든 타일이 도착할 때까지 기다림 (녹화·이미지 저장 전)
     async ready(timeoutMs = 12000) {
       this.draw(this.p);
+      if (this.is3d && this.scr) {
+        // 카메라가 지나갈 길의 타일을 미리 받는다 (녹화 중 빈 타일이 보이지 않게)
+        const want = new Map();
+        for (let i = 0; i <= 48; i++) {
+          for (const t of camTiles(this._cam(i / 48).cam, this.geo)) want.set(`${t.z}/${t.x}/${t.y}`, t);
+        }
+        const tiles = [...want.values()].map(t => getTile('color', t.z, t.x, t.y));
+        await Promise.race([Promise.all(tiles.map(t => t.promise)), new Promise(r => setTimeout(r, timeoutMs))]);
+        this.draw(this.p);
+        return;
+      }
       const all = Promise.all([...this._pending].map(t => t.promise));
       await Promise.race([all, new Promise(r => setTimeout(r, timeoutMs))]);
       this.draw(this.p);
@@ -394,8 +791,39 @@
     _path(ctx, from, to) {
       const s = this.scr;
       ctx.beginPath();
-      ctx.moveTo(s[from].x, s[from].y);
-      for (let i = from + 1; i <= to; i++) ctx.lineTo(s[i].x, s[i].y);
+      if (!this.is3d) {
+        ctx.moveTo(s[from].x, s[from].y);
+        for (let i = from + 1; i <= to; i++) ctx.lineTo(s[i].x, s[i].y);
+        return;
+      }
+      // 3D: 카메라 뒤로 넘어가는 부분은 잘라낸다
+      let pen = false;
+      for (let i = from; i <= to; i++) {
+        const a = s[i];
+        if (a.ok) {
+          if (pen) ctx.lineTo(a.x, a.y);
+          else {
+            if (i > from && !s[i - 1].ok) { const c = this._clipPt(a, s[i - 1]); ctx.moveTo(c.x, c.y); ctx.lineTo(a.x, a.y); }
+            else ctx.moveTo(a.x, a.y);
+            pen = true;
+          }
+        } else if (pen) {
+          const c = this._clipPt(s[i - 1], a); ctx.lineTo(c.x, c.y); pen = false;
+        }
+      }
+    }
+
+    // 3D: km 표시는 매 프레임 투영 위치에 — 화면 밖·카메라 뒤·겹치는 것은 생략 (비켜 놓으면 흔들린다)
+    _kms3d(list, u, W, H) {
+      const out = [], h = u * 3.4;
+      for (const k of list) {
+        const pt = this._at(k.m);
+        if (!pt || pt.x < 0 || pt.x > W || pt.y < 0 || pt.y > H) continue;
+        const b = { m: k.m, label: k.label, w: k.w, x: pt.x, y: pt.y, lx: pt.x, ly: pt.y };
+        if (out.some(o => Math.abs(o.lx - b.lx) * 2 < o.w + b.w && Math.abs(o.ly - b.ly) < h)) continue;
+        out.push(b);
+      }
+      return out;
     }
 
     draw(p = this.p, now = performance.now()) {
@@ -407,7 +835,24 @@
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      this._drawTiles(ctx);
+      let e = easeInOut(Math.max(0, Math.min(1, p)));
+      if (this.is3d) {
+        const c = this._cam(p);
+        e = c.e;
+        this._project3d(c.cam);
+        if (!(this.opt.transparent && !st.url)) {
+          const pending = [];
+          const tiles = st.url ? camTiles(c.cam, this.geo) : [];
+          // 곧 보일 타일을 미리 요청·업로드 (재생 중 빈 칸·흐린 칸이 덜 보이게)
+          if (st.url && p > 0 && p < 1) {
+            for (const t of camTiles(this._cam(Math.min(1, p + 0.035)).cam, this.geo)) GL3D.texFor(t.z, t.x, t.y, null);
+          }
+          ctx.drawImage(GL3D.render(W, H, Object.assign(c.cam, { tiles }), this.opt.style, pending), 0, 0);
+          pending.forEach(t => this._wait(t));
+        }
+      } else {
+        this._drawTiles(ctx);
+      }
 
       // 글씨가 잘 보이도록 위·아래 그림자 막
       if (this.opt.overlay && st.url) {
@@ -430,7 +875,6 @@
       ctx.stroke();
 
       // 진행한 만큼
-      const e = easeInOut(Math.max(0, Math.min(1, p)));
       const dNow = this.d0 + (this.d1 - this.d0) * e;
       const head = this._at(dNow);
       const upto = head ? head.i : 0;
@@ -449,6 +893,7 @@
             ctx.strokeStyle = colorOf(g.b); ctx.stroke();
           }
           // 마지막 점 → 머리까지 이어서
+          if (!s[upto].ok) { ctx.globalAlpha = 1; return; }
           ctx.beginPath(); ctx.moveTo(s[upto].x, s[upto].y); ctx.lineTo(head.x, head.y);
           ctx.strokeStyle = colorOf(this.opt.color === 'pace' ? (s[Math.min(s.length - 1, upto + 1)].b) : -1);
           ctx.stroke();
@@ -465,7 +910,8 @@
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = kmFont(u);
         const h = u * 3.4;
-        const shown = this.kms.filter(k => !k.hidden && k.m <= this.d0 + (this.d1 - this.d0) * e + 1);
+        let shown = this.kms.filter(k => (this.is3d || !k.hidden) && k.m <= this.d0 + (this.d1 - this.d0) * e + 1);
+        if (this.is3d) shown = this._kms3d(shown, u, W, H);
         // 비켜 선 표시는 실제 지점과 가는 선·점으로 잇는다 (표시들 아래에 먼저 그림)
         ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.fillStyle = '#fff'; ctx.lineWidth = Math.max(1, u * 0.22);
         for (const k of shown) {
@@ -487,9 +933,9 @@
         ctx.fillStyle = fill; ctx.fill();
         ctx.lineWidth = Math.max(1.5, r * 0.4); ctx.strokeStyle = ring; ctx.stroke();
       };
-      dot(s[0].x, s[0].y, u * 1.05, ACCENT, '#0d0d0d');
+      if (s[0].ok) dot(s[0].x, s[0].y, u * 1.05, ACCENT, '#0d0d0d');
       // 도착 점 (다 달렸을 때)
-      if (e >= 1) dot(s[s.length - 1].x, s[s.length - 1].y, u * 1.05, '#ffffff', '#0d0d0d');
+      if (e >= 1 && s[s.length - 1].ok) dot(s[s.length - 1].x, s[s.length - 1].y, u * 1.05, '#ffffff', '#0d0d0d');
 
       // 달리는 머리 — 은은하게 맥박치는 빛
       if (head && e > 0 && e < 1) {
@@ -549,19 +995,20 @@
       ctx.font = font(700, u * 4.2); ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillText('km', pad + dW + u * 0.8, statsY + u * 11);
 
-      // 시간·페이스는 실제 진행에 맞춰 흐르고, 평균값(심박·케이던스)은 처음 25% 동안만
-      // 빠르게 차오른 뒤 최종값을 유지한다 — 중간에 '심박 60' 처럼 보이면 오해를 부른다.
-      const fracAvg = Math.min(1, fracD / 0.25);
+      // 시간·페이스는 실제 진행에 맞춰 흐르고, 심박·케이던스는 그 지점의 값을 보여주다가
+      // 도착하면 평균으로 바뀐다 (거리별 기록이 없으면 처음부터 평균).
+      const ser = (route && route.series) || {};
+      const hr = liveMetric(ser.hr, o.hr, fracD), cad = liveMetric(ser.cad, o.cad, fracD);
       const items = [];
       for (const m of o.metrics || []) {
         if (m === 'time' && o.seconds) items.push(['시간', o.fmtTime(secs)]);
         if (m === 'pace' && o.seconds && o.dist) items.push(['페이스', o.fmtPace(dist > 0.02 ? secs / dist : o.seconds / o.dist)]);
-        if (m === 'hr' && o.hr) items.push(['평균 심박', String(Math.round(o.hr * fracAvg))]);
-        if (m === 'cadence' && o.cad) items.push(['케이던스', String(Math.round(o.cad * fracAvg))]);
+        if (m === 'hr' && hr) items.push([hr.avg ? '평균 심박' : '심박', String(hr.v), '평균 심박']);
+        if (m === 'cadence' && cad) items.push([cad.avg ? '평균 케이던스' : '케이던스', String(cad.v), '평균 케이던스']);
       }
       let x = pad;
       const gap = u * 6, ly = statsY + u * 14.5;
-      for (const [label, val] of items) {
+      for (const [label, val, wide] of items) {   // wide: 라벨이 바뀌어도 칸 폭이 흔들리지 않게
         ctx.font = font(600, u * 2.3); ctx.fillStyle = 'rgba(255,255,255,0.68)';
         ctx.fillText(label, x, ly);
         ctx.font = font(800, u * 4.3); ctx.fillStyle = '#fff';
@@ -569,7 +1016,7 @@
         ctx.font = font(800, u * 4.3);
         const w1 = ctx.measureText(val).width;
         ctx.font = font(600, u * 2.3);
-        x += Math.max(w1, ctx.measureText(label).width) + gap;
+        x += Math.max(w1, ctx.measureText(wide || label).width) + gap;
       }
       ctx.restore();
     }
@@ -642,5 +1089,5 @@
     }
   }
 
-  window.RouteMap = { parseTrackFile, analyze, splits, compact, mtAt, Renderer, recordVideo, videoType, STYLES };
+  window.RouteMap = { parseTrackFile, analyze, attachSeries, liveMetric, splits, compact, mtAt, Renderer, recordVideo, videoType, STYLES, has3d: () => GL3D.ok() };
 })();
