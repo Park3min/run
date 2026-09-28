@@ -913,7 +913,7 @@
 <!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
      JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
 <script src="garmin-web.js?v=7ff97925"></script>
-<script src="route-map.js?v=7f0475cd"></script>
+<script src="route-map.js?v=3cfd94e0"></script>
 <script>
 (() => {
   'use strict';
@@ -1182,7 +1182,7 @@
   function playMap() {
     if (!mapR || !state.route) return;
     $('mapPlay').classList.add('hidden');
-    mapR.play(state.map.speed * 1000, () => $('mapPlay').classList.remove('hidden'));
+    mapR.play(mapDurationMs(), () => $('mapPlay').classList.remove('hidden'));
   }
 
   // 기록 숫자·제목이 바뀌면 지도 오버레이도 맞춘다 (재생 중이면 다음 재생부터)
@@ -1215,9 +1215,14 @@
     on('mapAspectSeg', state.map.aspect);
     on('mapColorSeg', state.map.color);
     on('mapSpeedSeg', state.map.speed);
+    [...$('mapSpeedSeg').children].forEach(b => { b.textContent = `${+b.dataset.v * (is3dView() ? 2 : 1)}초`; });
     $('chipMapKm').classList.toggle('on', state.map.km);
     $('chipMapTrim').classList.toggle('on', state.map.trim);
   }
+
+  // 3D 는 카메라가 움직이는 만큼 두 배로 천천히 — 빠르면 보는 사람이 어지럽다
+  const is3dView = () => state.map.view === '3d' && has3d();
+  const mapDurationMs = () => state.map.speed * 1000 * (is3dView() ? 2 : 1);
 
   function mapExportSize() {
     const [aw, ah] = MAP_ASPECTS[state.map.aspect] || MAP_ASPECTS['1:1'];
@@ -1254,7 +1259,7 @@
       const { width, height } = mapExportSize();
       const { blob, ext } = await RM.recordVideo({
         route: state.route, opt: mapOptions(), width, height,
-        durationMs: state.map.speed * 1000, holdMs: 1500,
+        durationMs: mapDurationMs(), holdMs: 1500,
         onProgress: f => { $('mapStatus').textContent = `영상 만드는 중… ${Math.round(f * 100)}% (화면을 켜 두세요)`; },
       });
       await saveBlob(blob, fileName('route-').replace(/\.png$/, '.' + ext));
@@ -1303,7 +1308,7 @@
     [$('mapFsControls'), $('mapFsHint')].forEach(el => el.classList.add('idle'));
     mapFsR.stop(); mapFsR.p = 0;
     await mapFsR.ready(4000);               // 지도 조각이 다 온 뒤 출발
-    mapFsR.play(state.map.speed * 1000, () => {});
+    mapFsR.play(mapDurationMs(), () => {});
   }
   function openMapFs(hint) {
     if (!state.route) return;

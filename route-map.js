@@ -278,16 +278,16 @@
   // 기울어진 카메라로 본 지도 바닥을 WebGL 로 그린 뒤 2D 캔버스에 옮겨 담는다(영상 녹화·PNG 저장이
   // 그대로 동작). 모든 렌더러가 GL 캔버스 하나와 텍스처 캐시를 함께 쓴다 — 브라우저의 WebGL
   // 컨텍스트 수 제한(보통 16개)에 걸리지 않게. 다크·라이트 색 변환은 셰이더에서 한다.
-  const VS = `attribute vec2 aPos; attribute vec2 aUV;
-uniform mat4 uM; varying vec2 vUV; varying float vDepth; varying vec2 vW;
-void main(){ vec4 c = uM * vec4(aPos, 0.0, 1.0); gl_Position = c; vUV = aUV; vDepth = c.w; vW = aPos; }`;
+  const VS = `attribute vec3 aPos; attribute vec2 aUV; attribute float aShade;
+uniform mat4 uM; varying vec2 vUV; varying float vDepth; varying vec2 vW; varying float vShade;
+void main(){ vec4 c = uM * vec4(aPos, 1.0); gl_Position = c; vUV = aUV; vDepth = c.w; vW = aPos.xy; vShade = aShade; }`;
   const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
 precision mediump float;
 #endif
 uniform sampler2D uTex; uniform int uFx; uniform float uGrid; uniform vec3 uBg; uniform vec2 uFog;
-varying vec2 vUV; varying float vDepth; varying vec2 vW;
+varying vec2 vUV; varying float vDepth; varying vec2 vW; varying float vShade;
 void main(){
   vec3 c;
   if (uGrid > 0.5) {
@@ -308,6 +308,8 @@ void main(){
     }
     c = clamp(c, 0.0, 1.0);
   }
+  // 지형 음영 (북서쪽 빛) — 곱하기만 하면 다크 지도에선 안 보여서 밝은 면에 빛을 조금 더한다
+  c = clamp(c * vShade + (vShade - 1.0) * 0.14, 0.0, 1.0);
   gl_FragColor = vec4(mix(c, uBg, smoothstep(uFog.x, uFog.y, vDepth)), 1.0);
 }`;
 
@@ -340,11 +342,27 @@ void main(){
       this.loc = {};
       for (const n of ['uM', 'uTex', 'uFx', 'uGrid', 'uBg', 'uFog']) this.loc[n] = gl.getUniformLocation(pr, n);
       this.aPos = gl.getAttribLocation(pr, 'aPos'); this.aUV = gl.getAttribLocation(pr, 'aUV');
+      this.aShade = gl.getAttribLocation(pr, 'aShade');
       this.buf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
-      gl.enableVertexAttribArray(this.aPos); gl.enableVertexAttribArray(this.aUV);
-      gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 16, 0);
-      gl.vertexAttribPointer(this.aUV, 2, gl.FLOAT, false, 16, 8);
+      [this.aPos, this.aUV, this.aShade].forEach(a => gl.enableVertexAttribArray(a));
+      gl.vertexAttribPointer(this.aPos, 3, gl.FLOAT, false, 24, 0);
+      gl.vertexAttribPointer(this.aUV, 2, gl.FLOAT, false, 24, 12);
+      gl.vertexAttribPointer(this.aShade, 1, gl.FLOAT, false, 24, 20);
+      // 타일 한 장 = N×N 칸 격자 (지형 높이를 싣는다). N 별 삼각형 목록을 미리 만든다
+      this.ibuf = {};
+      for (const N of [8, 16]) {
+        const idx = new Uint16Array(N * N * 6);
+        let k = 0;
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1;
+          idx.set([a, c, b, b, c, d], k); k += 6;
+        }
+        const ib = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+        this.ibuf[N] = { ib, count: idx.length };
+      }
       this.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
       gl.uniform1i(this.loc.uTex, 0);
     },
@@ -389,34 +407,123 @@ void main(){
       gl.uniform1i(this.loc.uFx, st.fx === 'dark' ? 1 : st.fx === 'light' ? 2 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
       gl.activeTexture(gl.TEXTURE0);
-      if (!st.url) {                                  // 지도 없음 — 은은한 100m 격자
-        gl.uniform1f(this.loc.uGrid, 1);
-        const r = cam.D * 12, cx = cam.tx, cy = cam.ty;
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([cx - r, cy - r, 0, 0, cx + r, cy - r, 0, 0, cx - r, cy + r, 0, 0, cx + r, cy + r, 0, 0]), gl.STREAM_DRAW);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        return this.cv;
-      }
-      gl.uniform1f(this.loc.uGrid, 0);
+      gl.uniform1f(this.loc.uGrid, st.url ? 0 : 1);   // 지도 없음 — 은은한 100m 격자 바닥
       for (const t of cam.tiles) {
-        let tex = this.texFor(t.z, t.x, t.y, pending), u0 = 0, v0 = 0, us = 1;
-        for (let k = 1; !tex && k <= 6 && t.z - k >= 0; k++) {       // 조상 타일로 임시 표시
-          const m = 2 ** k;
-          tex = this.texFor(t.z - k, Math.floor(t.x / m), Math.floor(t.y / m), null);
-          if (tex) { us = 1 / m; u0 = (((t.x % m) + m) % m) / m; v0 = (t.y % m) / m; }
+        let tex = null, u0 = 0, v0 = 0, us = 1;
+        if (st.url) {
+          tex = this.texFor(t.z, t.x, t.y, pending);
+          for (let k = 1; !tex && k <= 6 && t.z - k >= 0; k++) {       // 조상 타일로 임시 표시
+            const m = 2 ** k;
+            tex = this.texFor(t.z - k, Math.floor(t.x / m), Math.floor(t.y / m), null);
+            if (tex) { us = 1 / m; u0 = (((t.x % m) + m) % m) / m; v0 = (t.y % m) / m; }
+          }
+          if (!tex) continue;
+          gl.bindTexture(gl.TEXTURE_2D, tex);
         }
-        if (!tex) continue;
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        const [x0, y0, x1, y1] = t.rect;
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-          // 이미지 첫 줄(v0)이 북쪽(y1)
-          x0, y0, u0, v0 + us, x1, y0, u0 + us, v0 + us, x0, y1, u0, v0, x1, y1, u0 + us, v0,
-        ]), gl.STREAM_DRAW);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        const N = t.z >= 16 ? 8 : 16;
+        gl.bufferData(gl.ARRAY_BUFFER, tileMesh(t, N, cam.terrain, u0, v0, us), gl.STREAM_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibuf[N].ib);
+        gl.drawElements(gl.TRIANGLES, this.ibuf[N].count, gl.UNSIGNED_SHORT, 0);
       }
       return this.cv;
     },
   };
   const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+
+  // ---------- 지형 (고도) ----------
+  // AWS 공개 지형 타일(Terrarium, 키 불필요·CORS 허용). 픽셀 색 → 해발 m: R·256 + G + B/256 − 32768.
+  // z12 한 칸 ≈ 30m (한국 위도) — SRTM 원자료 해상도와 비슷해 이보다 자세히 받을 필요가 없다.
+  const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+  const DEM_Z = 12;
+  const TERRAIN_EXAG = 1.6;             // 높낮이를 조금 과장해야 도시의 완만한 언덕도 느껴진다
+  const DEM = {
+    tiles: new Map(),
+    version: 0,                         // 새 타일이 들어올 때마다 증가 → 메시·경로 높이 다시 계산
+    tile(tx, ty) {
+      const n = 2 ** DEM_Z, xx = ((tx % n) + n) % n, key = `${xx}/${ty}`;
+      let t = this.tiles.get(key);
+      if (t) return t;
+      t = { ok: false, failed: false, h: null };
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      t.promise = new Promise(res => {
+        img.onload = () => {
+          try {
+            const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+            const g = c.getContext('2d', { willReadFrequently: true });
+            g.drawImage(img, 0, 0);
+            const d = g.getImageData(0, 0, 256, 256).data, h = new Float32Array(65536);
+            for (let i = 0; i < 65536; i++) h[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
+            t.h = h; t.ok = true; this.version++;
+          } catch (e) { t.failed = true; }
+          res();
+        };
+        img.onerror = () => { t.failed = true; res(); };
+      });
+      img.src = DEM_URL.replace('{z}', DEM_Z).replace('{x}', xx).replace('{y}', ty);
+      this.tiles.set(key, t);
+      if (this.tiles.size > 64) this.tiles.delete(this.tiles.keys().next().value);
+      return t;
+    },
+    // 메르카토르 (U, V) 의 해발 고도 (m). 아직 없으면 null (요청은 해 둔다)
+    at(U, V) {
+      const n = 2 ** DEM_Z, fx = U * n, fy = V * n, tx = Math.floor(fx), ty = Math.floor(fy);
+      const t = this.tile(tx, ty);
+      if (!t.ok) return null;
+      const px = Math.max(0, Math.min(255, (fx - tx) * 256 - 0.5)), py = Math.max(0, Math.min(255, (fy - ty) * 256 - 0.5));
+      const x0 = Math.floor(px), y0 = Math.floor(py), x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1);
+      const ax = px - x0, ay = py - y0, h = t.h;
+      const top = h[y0 * 256 + x0] * (1 - ax) + h[y0 * 256 + x1] * ax;
+      const bot = h[y1 * 256 + x0] * (1 - ax) + h[y1 * 256 + x1] * ax;
+      return top * (1 - ay) + bot * ay;
+    },
+    // 영역(메르카토르)의 타일을 미리 요청 → 모두 도착하면 resolve
+    prefetch(u0, v0, u1, v1) {
+      const n = 2 ** DEM_Z, list = [];
+      for (let tx = Math.floor(u0 * n); tx <= Math.floor(u1 * n); tx++)
+        for (let ty = Math.floor(v0 * n); ty <= Math.floor(v1 * n); ty++) if (list.length < 36) list.push(this.tile(tx, ty));
+      return Promise.all(list.map(t => t.promise));
+    },
+  };
+
+  // 지면 좌표(m) → 그려질 높이 z (m, 과장 포함). terrain: {geo, on}
+  function terrainZ(tr, x, y) {
+    if (!tr || !tr.on) return 0;
+    const h = DEM.at(tr.geo.cu + x / tr.geo.C, tr.geo.cv - y / tr.geo.C);
+    return h == null ? tr.fallback : (h - tr.base) * TERRAIN_EXAG;
+  }
+
+  // 타일 격자 메시: [x, y, z, u, v, 음영] × (N+1)² — 같은 타일·같은 지형 상태면 재사용
+  const meshCache = new Map();
+  const LIGHT = (() => { const l = [-0.55, 0.6, 1.0], n = Math.hypot(...l); return l.map(v => v / n); })();
+  function tileMesh(t, N, tr, u0, v0, us) {
+    const key = `${t.z}/${t.x}/${t.y}/${N}/${u0}/${v0}/${us}/${tr && tr.on ? DEM.version + ':' + tr.base : 'flat'}/${tr ? tr.geo.cu : 0}`;
+    let m = meshCache.get(key);
+    if (m) { meshCache.delete(key); meshCache.set(key, m); return m; }
+    const [x0, y0, x1, y1] = t.rect, out = new Float32Array((N + 1) * (N + 1) * 6);
+    const e = Math.max(15, (x1 - x0) / N);                 // 기울기 계산 간격
+    let k = 0;
+    for (let j = 0; j <= N; j++) {
+      const fy = j / N, y = y1 + (y0 - y1) * fy;           // j=0 이 북쪽(이미지 첫 줄)
+      for (let i = 0; i <= N; i++) {
+        const fx = i / N, x = x0 + (x1 - x0) * fx;
+        const z = terrainZ(tr, x, y);
+        let shade = 1;
+        if (tr && tr.on) {
+          const dzx = (terrainZ(tr, x + e, y) - terrainZ(tr, x - e, y)) / (2 * e);
+          const dzy = (terrainZ(tr, x, y + e) - terrainZ(tr, x, y - e)) / (2 * e);
+          const nl = Math.hypot(dzx, dzy, 1);
+          const dot = (-dzx * LIGHT[0] - dzy * LIGHT[1] + LIGHT[2]) / nl;
+          shade = Math.max(0.5, Math.min(1.45, 1 + 1.2 * (dot - LIGHT[2])));
+        }
+        out[k++] = x; out[k++] = y; out[k++] = z;
+        out[k++] = u0 + us * fx; out[k++] = v0 + us * fy; out[k++] = shade;
+      }
+    }
+    meshCache.set(key, out);
+    if (meshCache.size > 500) meshCache.delete(meshCache.keys().next().value);
+    return out;
+  }
 
   // ---------- 3D 카메라 ----------
   const FOV = 40 * rad, TY = Math.tan(FOV / 2);
@@ -433,7 +540,8 @@ void main(){
     const h = [sb, cb, 0], r = [cb, -sb, 0];
     const f = [h[0] * sp, h[1] * sp, -cp];                 // 바라보는 방향
     const u = [h[0] * cp, h[1] * cp, sp];                  // 화면 위쪽
-    const E = [c.tx - f[0] * c.D, c.ty - f[1] * c.D, -f[2] * c.D];
+    const tz = c.tz || 0;
+    const E = [c.tx - f[0] * c.D, c.ty - f[1] * c.D, tz - f[2] * c.D];
     const TX = TY * W / H;
     const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     const rE = dot(r, E), uE = dot(u, E), fE = dot(f, E);
@@ -442,13 +550,13 @@ void main(){
     m[0] = r[0] / TX; m[4] = r[1] / TX; m[8] = r[2] / TX; m[12] = -rE / TX;
     m[1] = u[0] / TY + c.oy * f[0]; m[5] = u[1] / TY + c.oy * f[1]; m[9] = u[2] / TY + c.oy * f[2]; m[13] = -uE / TY - c.oy * fE;
     m[3] = f[0]; m[7] = f[1]; m[11] = f[2]; m[15] = -fE;
-    return Object.assign({}, c, { r, u, f, E, TX, mat: m, W, H, near: c.D * 0.02, fog: [c.D * 1.9, c.D * 4.6] });
+    return Object.assign({}, c, { tz, r, u, f, E, TX, mat: m, W, H, near: c.D * 0.02, fog: [c.D * 1.9, c.D * 4.6] });
   }
 
   // 지면 점 → 동차 좌표 {cx, cy, cw}
-  function camClip(k, x, y) {
+  function camClip(k, x, y, z = k.tz) {
     const m = k.mat;
-    return { cx: m[0] * x + m[4] * y + m[12], cy: m[1] * x + m[5] * y + m[13], cw: m[3] * x + m[7] * y + m[15] };
+    return { cx: m[0] * x + m[4] * y + m[8] * z + m[12], cy: m[1] * x + m[5] * y + m[9] * z + m[13], cw: m[3] * x + m[7] * y + m[11] * z + m[15] };
   }
   const clipToScreen = (k, c) => ({ x: (c.cx / c.cw + 1) / 2 * k.W, y: (1 - c.cy / c.cw) / 2 * k.H });
 
@@ -459,7 +567,7 @@ void main(){
     for (let i = 0; i <= 4; i++) for (const [sx, sy] of [[i / 4, 0], [i / 4, 1], [0, i / 4], [1, i / 4]]) {
       const nx = sx * 2 - 1, ny = 1 - sy * 2;
       const d = [0, 1, 2].map(j => k.f[j] + k.r[j] * nx * k.TX + k.u[j] * (ny - k.oy) * TY);
-      let t = d[2] < -1e-4 ? -k.E[2] / d[2] : Infinity;
+      let t = d[2] < -1e-4 ? (k.tz - k.E[2]) / d[2] : Infinity;
       const len = Math.hypot(d[0], d[1], d[2]);
       t = Math.min(t, far / len);
       pts.push([k.E[0] + d[0] * t, k.E[1] + d[1] * t]);
@@ -486,7 +594,7 @@ void main(){
     const focal = (k.H / 2) / TY;
     const sizeOf = rect => {                       // 화면에서의 대략 크기(px)
       const nx = Math.max(rect[0], Math.min(k.E[0], rect[2])), ny = Math.max(rect[1], Math.min(k.E[1], rect[3]));
-      const dist = Math.hypot(nx - k.E[0], ny - k.E[1], k.E[2]);
+      const dist = Math.hypot(nx - k.E[0], ny - k.E[1], k.E[2] - k.tz);
       return (rect[2] - rect[0]) * focal / dist;
     };
     const visible = rect => {
@@ -623,13 +731,21 @@ void main(){
       const TX = TY * W / H;
       const fit = Math.max((y1 - y0) / (2 * TY * fracH), (x1 - x0) / (2 * TX * fracW), 150);
       const ovOy = hasOv ? 1 - 2 * 0.435 : 0;
+      // 따라가는 카메라는 넉넉히 멀리서(한 화면에 약 0.5~2.6km) — 가까우면 화면이 빨리 흘러 어지럽다
       this.cam3 = {
         top: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 0, D: fit, oy: ovOy },
-        end: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 42 * rad, D: fit * 1.12, oy: ovOy },
-        followD: Math.min(1800, Math.max(300, total * 0.12)) / (2 * TY),
+        end: { tx: (x0 + x1) / 2, ty: (y0 + y1) / 2, beta: 0, pitch: 45 * rad, D: fit * 1.15, oy: ovOy },
+        followD: Math.min(2600, Math.max(500, total * 0.18)) / (2 * TY),
       };
-      // 진행 방향 — 앞뒤 구간의 방향을 거리 기준으로 양방향 지수 평활 (급회전에 멀미 나지 않게)
-      const N = 400, step = (d1 - d0) / N, L = Math.max(200, total * 0.05), a = Math.min(1, step / L);
+      // 지형: 경로 주변(안개 끝까지) 고도 타일을 미리 요청
+      const g = this.geo, mg = this.cam3.followD * 5 + 500;
+      this.terrain = { geo: g, on: true, base: null, fallback: 0 };
+      this._demReady = DEM.prefetch(g.cu + (x0 - mg) / g.C, g.cv - (y1 + mg) / g.C, g.cu + (x1 + mg) / g.C, g.cv - (y0 - mg) / g.C);
+      this._zVer = -1;
+      this._demReady.then(() => { if (!this._playing && this.is3d) this.redraw(); });
+      // 진행 방향 — 앞뒤 구간의 방향을 거리 기준으로 양방향 지수 평활.
+      // 창을 넓게(전체의 15%, 최소 600m) 잡아 굽은 길에서도 카메라가 천천히 돈다
+      const N = 400, step = (d1 - d0) / N, L = Math.max(600, total * 0.15), a = Math.min(1, step / L);
       const dl = Math.max(30, total * 0.008);
       const dirs = [];
       for (let i = 0; i <= N; i++) {
@@ -652,31 +768,69 @@ void main(){
       return { x: A.wx + (B.wx - A.wx) * f, y: A.wy + (B.wy - A.wy) * f };
     }
 
+    // 경로 점들의 지형 높이 (고도 타일이 새로 올 때만 다시 계산)
+    _heights() {
+      const tr = this.terrain;
+      if (this._zVer === DEM.version) return;
+      this._zVer = DEM.version;
+      if (tr.base == null) {                          // 기준 높이 = 경로 가장 낮은 곳 (숫자를 작게)
+        let mn = Infinity;
+        for (let i = 0; i < this.scr.length; i += 10) {
+          const p = this.scr[i], h = DEM.at(tr.geo.cu + p.wx / tr.geo.C, tr.geo.cv - p.wy / tr.geo.C);
+          if (h != null) mn = Math.min(mn, h);
+        }
+        if (isFinite(mn)) tr.base = mn;
+      }
+      if (tr.base == null) { for (const p of this.scr) p.wz = 0; this._zMid = 0; return; }
+      let sum = 0;
+      for (const p of this.scr) { p.wz = terrainZ(tr, p.wx, p.wy); sum += p.wz; }
+      this._zMid = sum / this.scr.length;
+    }
+
+    _zAtD(m) {
+      const s = this.scr;
+      if (m <= s[0].d) return s[0].wz || 0;
+      if (m >= s[s.length - 1].d) return s[s.length - 1].wz || 0;
+      let lo = 0, hi = s.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (s[mid].d <= m) lo = mid; else hi = mid; }
+      const A = s[lo], B = s[hi], f = B.d > A.d ? (m - A.d) / (B.d - A.d) : 0;
+      return (A.wz || 0) + ((B.wz || 0) - (A.wz || 0)) * f;
+    }
+
     // 진행률 p → {카메라, e(경로 진행 0~1)}
+    // 도입(내려앉기)·마무리(전체 보기)를 길게 잡아 전환이 천천히 일어나게 한다
     _cam(p) {
-      const INTRO = 0.1, OUTRO = 0.14, c3 = this.cam3;
+      this._heights();
+      const INTRO = 0.14, OUTRO = 0.16, c3 = this.cam3;
       const e = easeInOut(Math.max(0, Math.min(1, (p - INTRO) / (1 - INTRO - OUTRO))));
       const follow = ee => {
-        const h = this._atW(this.d0 + (this.d1 - this.d0) * ee);
+        const dm = this.d0 + (this.d1 - this.d0) * ee;
+        const h = this._atW(dm);
         const x = ee * (this.bear.length - 1), i = Math.floor(x), f = x - i;
         const beta = lerpAng(this.bear[i], this.bear[Math.min(this.bear.length - 1, i + 1)], f);
-        return { tx: h.x, ty: h.y, beta, pitch: 58 * rad, D: c3.followD, oy: -0.12 };
+        // 카메라 높이는 앞뒤 200m 평균 — 오르막·내리막에서 화면이 출렁이지 않게
+        const tz = (this._zAtD(dm - 200) + this._zAtD(dm) * 2 + this._zAtD(dm + 200)) / 4;
+        return { tx: h.x, ty: h.y, tz, beta, pitch: 52 * rad, D: c3.followD, oy: -0.1 };
       };
+      const zm = this._zMid || 0;
+      const top = Object.assign({ tz: zm }, c3.top), end = Object.assign({ tz: zm }, c3.end);
       const mix = (A, B, t) => ({
-        tx: lerp(A.tx, B.tx, t), ty: lerp(A.ty, B.ty, t), beta: lerpAng(A.beta, B.beta, t),
+        tx: lerp(A.tx, B.tx, t), ty: lerp(A.ty, B.ty, t), tz: lerp(A.tz, B.tz, t), beta: lerpAng(A.beta, B.beta, t),
         pitch: lerp(A.pitch, B.pitch, t), D: Math.exp(lerp(Math.log(A.D), Math.log(B.D), t)), oy: lerp(A.oy, B.oy, t),
       });
       let cam;
-      if (p < INTRO) cam = mix(c3.top, follow(0), smooth(Math.max(0, p) / INTRO));
-      else if (p > 1 - OUTRO) cam = mix(follow(1), c3.end, smooth(Math.min(1, (p - 1 + OUTRO) / OUTRO)));
+      if (p < INTRO) cam = mix(top, follow(0), smooth(Math.max(0, p) / INTRO));
+      else if (p > 1 - OUTRO) cam = mix(follow(1), end, smooth(Math.min(1, (p - 1 + OUTRO) / OUTRO)));
       else cam = follow(e);
-      return { cam: camBasis(cam, this.view.W, this.view.H), e };
+      const k = camBasis(cam, this.view.W, this.view.H);
+      k.terrain = this.terrain;
+      return { cam: k, e };
     }
 
     // 경로 점들을 카메라로 투영 (뒤로 넘어간 점은 ok=false)
     _project3d(k) {
       for (const p of this.scr) {
-        const c = camClip(k, p.wx, p.wy);
+        const c = camClip(k, p.wx, p.wy, p.wz || 0);
         p.cx = c.cx; p.cy = c.cy; p.cw = c.cw; p.ok = c.cw > k.near;
         if (p.ok) { p.x = (c.cx / c.cw + 1) / 2 * k.W; p.y = (1 - c.cy / c.cw) / 2 * k.H; }
       }
@@ -773,7 +927,9 @@ void main(){
     async ready(timeoutMs = 12000) {
       this.draw(this.p);
       if (this.is3d && this.scr) {
-        // 카메라가 지나갈 길의 타일을 미리 받는다 (녹화 중 빈 타일이 보이지 않게)
+        // 지형 → 카메라가 지나갈 길의 지도 타일 순으로 미리 받는다 (녹화 중 빈 타일이 보이지 않게)
+        await Promise.race([this._demReady, new Promise(r => setTimeout(r, timeoutMs / 2))]);
+        this._heights();
         const want = new Map();
         for (let i = 0; i <= 48; i++) {
           for (const t of camTiles(this._cam(i / 48).cam, this.geo)) want.set(`${t.z}/${t.x}/${t.y}`, t);
@@ -842,7 +998,7 @@ void main(){
         this._project3d(c.cam);
         if (!(this.opt.transparent && !st.url)) {
           const pending = [];
-          const tiles = st.url ? camTiles(c.cam, this.geo) : [];
+          const tiles = camTiles(c.cam, this.geo);
           // 곧 보일 타일을 미리 요청·업로드 (재생 중 빈 칸·흐린 칸이 덜 보이게)
           if (st.url && p > 0 && p < 1) {
             for (const t of camTiles(this._cam(Math.min(1, p + 0.035)).cam, this.geo)) GL3D.texFor(t.z, t.x, t.y, null);
