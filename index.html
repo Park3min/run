@@ -480,6 +480,12 @@
   .cap-reset svg { width: 26px; height: 26px; display: block; }
   .cap-reset.hidden { display: none; }
   .cap-reset.idle { opacity: 0; pointer-events: none; }
+  /* 지도 여정 전체 화면 재생 (화면 녹화용) */
+  #mapFs { background: #000; --cap-ink: #fff; --cap-sub: rgba(255,255,255,0.65); }
+  #mapFsCanvas { display: block; cursor: pointer; }
+  #mapFsStart { bottom: auto; top: 50%; transform: translate(-50%, -50%); }
+  #mapFsStart:active { transform: translate(-50%, -50%) scale(0.97); }
+  #mapFsHint { bottom: auto; top: calc(50% + 48px); text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
 </style>
 </head>
 <body>
@@ -730,6 +736,7 @@
             <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             이미지 저장
           </button>
+          <button class="btn secondary" id="btnMapFs">전체 화면 재생</button>
           <button class="btn secondary" id="btnGpxMap2">다른 경로</button>
         </div>
         <div class="hint" id="mapStatus">지도를 누르면 다시 재생돼요 · 출발·도착 가리기는 집 위치 노출을 막아줘요</div>
@@ -886,6 +893,20 @@
     </svg>
   </button>
   <div class="cap-hint" id="capHint">먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요</div>
+</div>
+
+<!-- 지도 여정 전체 화면 재생 (영상 저장이 안 되는 브라우저 · 화면 녹화용) -->
+<div class="cap-overlay" id="mapFs">
+  <div class="cap-controls" id="mapFsControls">
+    <button class="btn" id="mapFsReplay">다시 재생</button>
+    <button class="btn secondary" id="mapFsClose">닫기 (ESC)</button>
+  </div>
+  <canvas id="mapFsCanvas"></canvas>
+  <button class="cap-start" id="mapFsStart">
+    <svg class="icon" style="width:24px;height:24px;vertical-align:-5px;margin-right:6px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+    시작
+  </button>
+  <div class="cap-hint" id="mapFsHint">먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요</div>
 </div>
 
 <script src="garmin-web.js"></script>
@@ -1195,7 +1216,8 @@
   $('btnMapVideo').addEventListener('click', async () => {
     if (!state.route || mapBusy) return;
     if (!RM.videoType()) {
-      $('mapStatus').textContent = '이 브라우저는 영상 저장을 지원하지 않아요. 미리보기를 재생하며 화면 녹화로 저장해 주세요.';
+      $('mapStatus').textContent = '이 브라우저는 영상 저장을 지원하지 않아요. 전체 화면 재생을 화면 녹화로 담아 주세요.';
+      openMapFs('이 브라우저는 영상 파일 저장을 지원하지 않아요 · 화면 녹화를 켠 뒤 시작을 누르세요');
       return;
     }
     mapBusy = true;
@@ -1218,6 +1240,72 @@
       mapBusy = false;
       btn.disabled = false;
     }
+  });
+
+  // ---------- 지도 여정 전체 화면 재생 ----------
+  // 영상 파일 저장이 안 되는 브라우저(아이폰 일부·앱 내 브라우저)에서 화면 녹화로 담을 수 있게,
+  // 화면을 꽉 채우는 깨끗한 재생 화면. 시작 전에는 경로 윤곽만 보이며 대기한다.
+  const mapFs = $('mapFs');
+  let mapFsR = null, mapFsIdle = null;
+  function layoutMapFs() {
+    const [aw, ah] = MAP_ASPECTS[state.map.aspect] || MAP_ASPECTS['1:1'];
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const cssW = Math.min(vw, vh * aw / ah), cssH = cssW * ah / aw;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cv = $('mapFsCanvas');
+    cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
+    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+    if (!mapFsR) mapFsR = new RM.Renderer(cv);
+    mapFsR.stop();
+    mapFsR.set(state.route, mapOptions());
+  }
+  function mapFsWake() {
+    [$('mapFsControls'), $('mapFsHint')].forEach(el => el.classList.remove('idle'));
+    clearTimeout(mapFsIdle);
+    mapFsIdle = setTimeout(() => [$('mapFsControls'), $('mapFsHint')].forEach(el => el.classList.add('idle')), 2500);
+  }
+  function mapFsWait(hint) {
+    if (mapFsR) { mapFsR.stop(); mapFsR.p = 0; mapFsR.draw(0); }
+    $('mapFsStart').classList.remove('hidden');
+    $('mapFsHint').textContent = hint || '먼저 화면 녹화를 시작한 뒤 시작 버튼을 누르세요';
+  }
+  async function mapFsPlay() {
+    if (!mapFsR) return;
+    $('mapFsStart').classList.add('hidden');
+    $('mapFsHint').textContent = '화면을 누르면 다시 재생돼요';
+    clearTimeout(mapFsIdle);                  // 녹화 화면이 깨끗하도록 조작 버튼은 바로 숨김
+    [$('mapFsControls'), $('mapFsHint')].forEach(el => el.classList.add('idle'));
+    mapFsR.stop(); mapFsR.p = 0;
+    await mapFsR.ready(4000);               // 지도 조각이 다 온 뒤 출발
+    mapFsR.play(state.map.speed * 1000, () => {});
+  }
+  function openMapFs(hint) {
+    if (!state.route) return;
+    if (mapR) mapR.stop();
+    mapFs.classList.add('show');
+    layoutMapFs();
+    mapFsWait(hint);
+    mapFsWake();
+    mapFsR.ready(8000);                       // 대기하는 동안 지도 미리 받기
+  }
+  function closeMapFs() {
+    if (!mapFs.classList.contains('show')) return;
+    mapFs.classList.remove('show');
+    if (mapFsR) mapFsR.stop();
+  }
+  $('btnMapFs').addEventListener('click', () => openMapFs());
+  $('mapFsStart').addEventListener('click', mapFsPlay);
+  $('mapFsReplay').addEventListener('click', mapFsPlay);
+  $('mapFsCanvas').addEventListener('click', () => { if ($('mapFsStart').classList.contains('hidden')) mapFsPlay(); });
+  $('mapFsClose').addEventListener('click', closeMapFs);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMapFs(); });
+  mapFs.addEventListener('pointermove', mapFsWake);
+  mapFs.addEventListener('pointerdown', mapFsWake);
+  window.addEventListener('resize', () => {
+    if (!mapFs.classList.contains('show')) return;
+    const waiting = !$('mapFsStart').classList.contains('hidden');
+    layoutMapFs();
+    if (waiting) mapFsWait($('mapFsHint').textContent); else mapFsR.draw(1);
   });
 
   // ---------- GPX · TCX 파일 불러오기 ----------
