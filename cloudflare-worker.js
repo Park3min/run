@@ -1,5 +1,5 @@
 /**
- * 가민 커넥트 중계 + 스트라바 토큰 교환 워커 (Cloudflare Workers)
+ * 가민 커넥트 중계 워커 (Cloudflare Workers)
  *
  * 브라우저에서 직접 접근할 수 없는 가민 서버(CORS 차단)로 요청을 그대로 전달만 한다.
  * - 아무것도 저장하지 않음 (stateless). 로그인 토큰은 각 사용자의 브라우저에만 저장됨.
@@ -95,43 +95,6 @@ async function handleCount(request, env, origin) {
   return new Response(JSON.stringify({ today, total, date: day }), { headers });
 }
 
-/**
- * 스트라바 공식 OAuth 토큰 교환 — 비밀 키(STRAVA_CLIENT_SECRET)를 앱에 넣지 않으려고 여기서만 쓴다.
- *  GET  /strava/config              → { clientId }  (STRAVA_CLIENT_ID 가 없으면 null)
- *  POST /strava/token   {code}      → 스트라바 토큰 응답 (access_token·refresh_token·expires_at·athlete)
- *  POST /strava/refresh {refresh_token}
- * 토큰은 저장하지 않고 그대로 돌려준다 (사용자 기기에만 저장).
- */
-async function handleStrava(request, env, origin, path) {
-  const headers = { ...corsHeaders(origin), "Content-Type": "application/json", "Cache-Control": "no-store" };
-  const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers });
-  const id = env && env.STRAVA_CLIENT_ID, secret = env && env.STRAVA_CLIENT_SECRET;
-  if (path === "/strava/config") return json({ clientId: id && secret ? String(id) : null });
-  if (!id || !secret) return json({ error: "스트라바 연결 준비가 아직 안 됐어요" }, 503);
-  if (request.method !== "POST") return json({ error: "POST only" }, 405);
-  let body = {};
-  try { body = await request.json(); } catch (e) { /* 빈 본문 */ }
-  const form = new URLSearchParams({ client_id: String(id), client_secret: secret });
-  if (path === "/strava/token" && body.code) {
-    form.set("code", String(body.code));
-    form.set("grant_type", "authorization_code");
-  } else if (path === "/strava/refresh" && body.refresh_token) {
-    form.set("refresh_token", String(body.refresh_token));
-    form.set("grant_type", "refresh_token");
-  } else {
-    return json({ error: "잘못된 요청이에요" }, 400);
-  }
-  const r = await fetch("https://www.strava.com/oauth/token", { method: "POST", body: form });
-  const out = await r.json().catch(() => ({}));
-  if (!r.ok) return json({ error: "스트라바 인증에 실패했어요", detail: out.message || null }, r.status);
-  // 필요한 것만 돌려준다
-  const a = out.athlete || {};
-  return json({
-    access_token: out.access_token, refresh_token: out.refresh_token, expires_at: out.expires_at,
-    athlete: a.id ? { id: a.id, firstname: a.firstname || "", lastname: a.lastname || "" } : undefined,
-  });
-}
-
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
@@ -142,9 +105,6 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/count") {
       return handleCount(request, env, origin);
-    }
-    if (url.pathname.startsWith("/strava/")) {
-      return handleStrava(request, env, origin, url.pathname);
     }
 
     const m = url.pathname.match(/^\/p\/([^/]+)(\/.*)$/);
