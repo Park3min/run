@@ -167,12 +167,21 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             lock.lock(); hr = v; lock.unlock()
             group.leave()
         })
+        // 걸음 수는 1분 단위 합계로 — 아이폰과 시계가 같은 걸음을 각각 기록해도 건강 앱의 출처 우선순위로
+        // 한 번만 센다 (원본 기록을 그냥 더하면 두 배가 된다). 긴 구간 기록은 분 단위로 나눠 준다.
         group.enter()
-        store.execute(HKSampleQuery(sampleType: stepType, predicate: range, limit: HKObjectQueryNoLimit, sortDescriptors: byTime) { _, s, _ in
-            let v = (s as? [HKQuantitySample] ?? []).map { [ms($0.startDate), ms($0.endDate), $0.quantity.doubleValue(for: .count())] }
+        var minute = DateComponents(); minute.minute = 1
+        let cq = HKStatisticsCollectionQuery(quantityType: stepType, quantitySamplePredicate: range,
+                                             options: .cumulativeSum, anchorDate: w.startDate, intervalComponents: minute)
+        cq.initialResultsHandler = { _, res, _ in
+            var v: [[Double]] = []
+            res?.enumerateStatistics(from: w.startDate, to: w.endDate) { st, _ in
+                if let q = st.sumQuantity() { v.append([ms(st.startDate), ms(st.endDate), q.doubleValue(for: .count())]) }
+            }
             lock.lock(); steps = v; lock.unlock()
             group.leave()
-        })
+        }
+        store.execute(cq)
 
         group.notify(queue: .global()) {
             pts.sort { $0[2] < $1[2] }
