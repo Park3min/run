@@ -56,6 +56,14 @@ npm run open      # Xcode 로 열기 → 실행
 xcrun simctl launch booted com.park3min.runlog -seedHealthDemo YES
 ```
 
+#### 테스트플라이트에 올리기
+
+1. (처음 한 번) [App Store Connect](https://appstoreconnect.apple.com) → 앱 → **+ 신규 앱** — 번들 ID `com.park3min.runlog`, 기본 언어 한국어
+2. `cd ios-app && npm run testflight` — 웹 파일 반영 → 릴리스 아카이브 → 업로드 (빌드 번호는 날짜·시각으로 자동)
+3. App Store Connect → TestFlight 에서 처리(10~30분)가 끝나면 내부 테스터에 추가 → 아이폰 TestFlight 앱에서 설치
+
+웹 코드를 고친 뒤 앱에도 반영하려면 2번만 다시 실행하면 돼요. 암호화 규정 답변은 `ITSAppUsesNonExemptEncryption=false` 로 자동 처리돼요.
+
 ## 구성
 
 | 파일 | 역할 |

@@ -19,6 +19,7 @@
 		A1B2C3D40000000000000002 /* RunlogHealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000001 /* RunlogHealthPlugin.swift */; };
 		A1B2C3D40000000000000004 /* RunlogViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000003 /* RunlogViewController.swift */; };
 		A1B2C3D40000000000000007 /* RunlogSharePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000006 /* RunlogSharePlugin.swift */; };
+		A1B2C3D4000000000000000B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000000000000000A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		A1B2C3D40000000000000003 /* RunlogViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunlogViewController.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000005 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		A1B2C3D40000000000000006 /* RunlogSharePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunlogSharePlugin.swift; sourceTree = "<group>"; };
+		A1B2C3D4000000000000000A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,6 +78,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				A1B2C3D40000000000000001 /* RunlogHealthPlugin.swift */,
 				A1B2C3D40000000000000003 /* RunlogViewController.swift */,
+				A1B2C3D4000000000000000A /* PrivacyInfo.xcprivacy */,
 				A1B2C3D40000000000000006 /* RunlogSharePlugin.swift */,
 				A1B2C3D40000000000000005 /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -156,6 +159,7 @@
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
+				A1B2C3D4000000000000000B /* PrivacyInfo.xcprivacy in Resources */,
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
