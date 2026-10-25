@@ -1061,6 +1061,13 @@
           <span class="conn-state" id="connGarminState"></span></span>
         <button type="button" class="btn secondary" id="connGarminBtn">연결하기</button>
       </div>
+      <div class="conn-row">
+        <span class="conn-ico"><svg class="icon icon-lg" viewBox="0 0 24 24"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg></span>
+        <span class="conn-text"><b>스트라바</b>
+          <span class="conn-sub">스트라바에 올린 러닝을 심박·케이던스·GPS 경로까지 가져와요</span>
+          <span class="conn-state" id="connStravaState"></span></span>
+        <button type="button" class="btn secondary" id="connStravaBtn">연결하기</button>
+      </div>
     </div>
     <div class="hint" id="connNote" style="margin-top:12px"></div>
     <button class="btn secondary" type="button" id="connClose">닫기</button>
@@ -1826,6 +1833,7 @@
         `${a.avgHr ? ` · ♥ ${a.avgHr}` : ''}${a.elevGain ? ` · ▲ ${a.elevGain}m` : ''}</div>`;
       b.addEventListener('click', () => {
         if (a.via === 'health') return pickHealthWorkout(a);
+        if (a.via === 'strava') return pickStravaActivity(a);
         if (a.via === 'garmin') gSource = 'web';
         pickGarminActivity(a);
       });
@@ -1898,6 +1906,116 @@
   // ---------- 건강 앱 (아이폰 앱 전용 — 네이티브 플러그인 RunlogHealth) ----------
   const Health = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
     ? (window.Capacitor.Plugins || {}).RunlogHealth : null;
+  // ---- 스트라바 (공식 OAuth) — 비밀 키는 워커에서만 쓰고, 토큰은 이 기기에만 저장 ----
+  const Auth = (window.Capacitor && window.Capacitor.Plugins || {}).RunlogAuth;
+  const STRAVA_REDIRECT = 'runlog://runlog.park3min.com/strava';
+  const strava = {
+    load() { try { return JSON.parse(localStorage.getItem('runlog.strava')); } catch (e) { return null; } },
+    save(t) { localStorage.setItem('runlog.strava', JSON.stringify(t)); },
+    on() { return !!(this.load() || {}).refresh_token; },
+    async post(path, body) {
+      const r = await fetch(`${GARMIN_PROXY}${path}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `스트라바 연결 오류 (${r.status})`);
+      return j;
+    },
+    async connect() {
+      const cfg = await (await fetch(`${GARMIN_PROXY}/strava/config`)).json().catch(() => ({}));
+      if (!cfg.clientId) throw new Error('스트라바 연결 준비가 아직 안 됐어요');
+      const url = 'https://www.strava.com/oauth/mobile/authorize?' + new URLSearchParams({
+        client_id: cfg.clientId, redirect_uri: STRAVA_REDIRECT, response_type: 'code',
+        approval_prompt: 'auto', scope: 'read,activity:read_all',
+      });
+      const { url: back } = await Auth.start({ url, scheme: 'runlog' });
+      const q = new URL(back).searchParams;
+      if (q.get('error') || !q.get('code')) throw new Error('스트라바에서 허락하지 않았어요');
+      if (!/activity:read/.test(q.get('scope') || '')) throw new Error("활동 보기 권한을 허락해 주세요 ('활동 보기' 체크)");
+      this.save(await this.post('/strava/token', { code: q.get('code') }));
+    },
+    async disconnect() {
+      const t = this.load();
+      localStorage.removeItem('runlog.strava');
+      if (t && t.access_token) {   // 스트라바 쪽 허락도 거둔다 (실패해도 이 기기에선 끊김)
+        fetch('https://www.strava.com/oauth/deauthorize', { method: 'POST', headers: { Authorization: `Bearer ${t.access_token}` } }).catch(() => {});
+      }
+    },
+    async token() {
+      let t = this.load();
+      if (!t) throw new Error('스트라바를 다시 연결해 주세요');
+      if (!(t.expires_at * 1000 > Date.now() + 60000)) {
+        try { t = { ...t, ...(await this.post('/strava/refresh', { refresh_token: t.refresh_token })) }; }
+        catch (e) { throw new Error('스트라바 연결이 만료됐어요. 앱 연결에서 다시 연결해 주세요'); }
+        this.save(t);
+      }
+      return t.access_token;
+    },
+    async api(path) {
+      const r = await fetch(`https://www.strava.com/api/v3${path}`, { headers: { Authorization: `Bearer ${await this.token()}` } });
+      if (r.status === 401) throw new Error('스트라바 연결이 만료됐어요. 앱 연결에서 다시 연결해 주세요');
+      if (r.status === 429) throw new Error('스트라바 요청이 많아 잠시 막혔어요. 15분 뒤 다시 해 주세요');
+      if (!r.ok) throw new Error(`스트라바 오류 (${r.status})`);
+      return r.json();
+    },
+  };
+  // 스트라바 활동 → 목록 항목 (케이던스는 한쪽 발 기준이라 ×2)
+  const stravaItem = a => {
+    const ms = Date.parse(a.start_date);
+    return {
+      via: 'strava', id: a.id, name: a.name || '러닝', source: 'Strava',
+      isRun: /Run/.test(a.sport_type || a.type || ''), indoor: !!a.trainer || a.sport_type === 'VirtualRun',
+      hasGps: !!(a.map && a.map.summary_polyline),
+      start: localIso(new Date(ms)), startMs: ms,
+      distanceKm: (a.distance || 0) / 1000, durationSec: a.moving_time || a.elapsed_time || 0,
+      avgHr: a.average_heartrate ? Math.round(a.average_heartrate) : null,
+      cadence: a.average_cadence ? Math.round(a.average_cadence * (a.average_cadence < 120 ? 2 : 1)) : null,
+      elevGain: a.total_elevation_gain ? Math.round(a.total_elevation_gain) : null,
+    };
+  };
+
+  // 스트라바 활동 불러오기 — 스트림(시간·위치·심박·케이던스·고도)을 GPX 와 같은 길(loadTrack)로
+  async function pickStravaActivity(a) {
+    $('gModal').classList.remove('show');
+    $('csvStatus').textContent = `${a.name} — 스트라바에서 불러오는 중…`;
+    let st = {};
+    try {
+      st = await strava.api(`/activities/${a.id}/streams?keys=time,latlng,heartrate,cadence,altitude,distance&key_by_type=true`);
+    } catch (e) {
+      $('csvStatus').textContent = `✕ ${e.message}`;
+      return;
+    }
+    const D = k => (st[k] && st[k].data) || [];
+    const T = D('time'), LL = D('latlng'), HR = D('heartrate'), CAD = D('cadence'), ALT = D('altitude'), DIST = D('distance');
+    if (LL.length > 1 && T.length === LL.length) {
+      loadTrack(a.name, LL.map(([lat, lon], i) => ({
+        lat, lon, t: a.startMs + T[i] * 1000,
+        hr: HR[i] || null, cad: CAD[i] || null, ele: ALT[i] != null ? ALT[i] : null,
+      })), `${a.name} (스트라바)`);
+      return;
+    }
+    // 트레드밀 등 경로 없는 활동: 요약 값 + 거리별 심박·케이던스 곡선
+    clearInputFields();
+    $('inDist').value = a.distanceKm.toFixed(2);
+    $('inTime').value = fmtTime(a.durationSec);
+    if (a.avgHr) $('inHr').value = a.avgHr;
+    if (a.cadence) $('inCad').value = a.cadence;
+    if (a.elevGain) $('inElev').value = a.elevGain;
+    $('inTitle').value = a.name;
+    $('inDate').value = a.start.slice(0, 10); $('inStartTime').value = a.start.slice(11, 16);
+    if (DIST.length > 10) {
+      const cadAvg = CAD.length ? CAD.reduce((x, y) => x + y, 0) / CAD.length : 0;
+      state.series = RM.attachSeries({ totalM: a.distanceKm * 1000 },
+        DIST.map((d, i) => ({ d, hr: HR[i] || null, cad: CAD[i] || null })), cadAvg && cadAvg < 120 ? 2 : 1).series;
+    }
+    syncPickerLabels();
+    const ok = applyRecord();
+    const why = a.indoor ? 'GPS 경로가 없는 실내 러닝이에요' : '스트라바에 이 러닝의 GPS 경로가 없어요';
+    $('mapEmptyNote').textContent = `${why}. 지도 여정은 GPS 경로가 있는 기록에서 만들 수 있어요`;
+    $('csvStatus').textContent = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러왔어요 · ${why}. 기록만 채웠어요`;
+    if (ok) goStep(2, { note: $('csvStatus').textContent });
+  }
+
   // 연결 상태: 건강 앱은 권한을 물은 적이 있고 사용자가 끄지 않았으면 연결, 가민은 저장된 로그인이 있으면 연결
   let healthAsked = false;
   const healthOn = () => !!Health && healthAsked && localStorage.getItem('runlog.healthOff') !== '1';
@@ -1911,7 +2029,11 @@
     $('connGarminState').textContent = g ? '연결됨 · 건강 앱의 가민 기록도 심박·경로까지 채워요' : '연결 안 됨';
     $('connGarminState').className = 'conn-state' + (g ? '' : ' off');
     $('connGarminBtn').textContent = g ? '연결 끊기' : '연결하기';
-    const names = [h && '건강 앱', g && '가민 커넥트'].filter(Boolean);
+    const sv = strava.on(), who = sv && (strava.load().athlete || {}).firstname;
+    $('connStravaState').textContent = sv ? `연결됨${who ? ` · ${who}` : ''}` : '연결 안 됨';
+    $('connStravaState').className = 'conn-state' + (sv ? '' : ' off');
+    $('connStravaBtn').textContent = sv ? '연결 끊기' : '연결하기';
+    const names = [h && '건강 앱', g && '가민 커넥트', sv && '스트라바'].filter(Boolean);
     $('btnHealthSub').textContent = names.length
       ? `${names.join('·')}에서 러닝을 골라요` : '먼저 기록을 가져올 앱을 연결해 주세요';
   }
@@ -1957,6 +2079,25 @@
         $('connNote').textContent = `✕ ${e.message || '건강 앱에 연결하지 못했어요'}`;
       }
     });
+    $('connStravaBtn').addEventListener('click', async () => {
+      const btn = $('connStravaBtn');
+      if (strava.on()) {
+        await strava.disconnect();
+        renderConn();
+        $('connNote').textContent = '스트라바 연결을 끊었어요';
+        return;
+      }
+      btn.disabled = true;
+      $('connNote').textContent = '스트라바 연결 화면을 여는 중…';
+      try {
+        await strava.connect();
+        renderConn();
+        $('connNote').textContent = '스트라바를 연결했어요';
+      } catch (e) {
+        $('connNote').textContent = /취소/.test(e.message || '') ? '' : `✕ ${e.message || '스트라바에 연결하지 못했어요'}`;
+      }
+      btn.disabled = false;
+    });
     $('connGarminBtn').addEventListener('click', () => {
       if (garminOn()) {
         gw.logout();
@@ -1972,20 +2113,27 @@
 
     // 연결한 앱들의 러닝을 한 목록으로 — 건강 앱과 가민에 같은 러닝(가민이 건강 앱에 넘긴 것)이 있으면 가민 쪽 하나만
     $('btnHealth').addEventListener('click', async () => {
-      const hOn = healthOn(), gOn = garminOn();
-      if (!hOn && !gOn) { openConn('먼저 기록을 가져올 앱을 연결해 주세요'); return; }
+      const hOn = healthOn(), gOn = garminOn(), sOn = strava.on();
+      if (!hOn && !gOn && !sOn) { openConn('먼저 기록을 가져올 앱을 연결해 주세요'); return; }
       $('csvStatus').textContent = '연결한 앱에서 러닝 기록을 찾는 중…';
-      let hl = [], gl = [];
+      let hl = [], gl = [], sl = [];
       const fails = [];
       await Promise.all([
         hOn && Health.listWorkouts({ limit: 30 }).then(r => { hl = r.workouts || []; })
           .catch(() => fails.push('건강 앱')),
         gOn && gw.getActivities(20).then(r => { gl = r || []; })
           .catch(e => fails.push(/로그인|만료/.test(e.message || '') ? '가민 커넥트(다시 연결해 주세요)' : '가민 커넥트')),
+        sOn && strava.api('/athlete/activities?per_page=30').then(r => { sl = (r || []).map(stravaItem); })
+          .catch(e => fails.push(/만료/.test(e.message || '') ? '스트라바(다시 연결해 주세요)' : '스트라바')),
       ]);
+      // 같은 러닝이 여러 곳에 있으면(가민 → 스트라바 업로드, 가민·애플워치 → 건강 앱) 시작 5분·거리 15% 안이면 하나만
+      const same = (x, startMs, km) => x.startMs && Math.abs(x.startMs - startMs) < 5 * 60000
+        && (!km || !x.distanceKm || Math.abs(x.distanceKm - km) / Math.max(km, x.distanceKm) < 0.15);
       const items = gl.map(g => ({ ...g, via: 'garmin', source: 'Garmin Connect' }));
+      for (const it of sl) if (!items.some(x => same(x, it.startMs, it.distanceKm))) items.push(it);
       for (const w of hl) {
         if (isGarminSource(w) && gl.some(g => g.startMs && Math.abs(g.startMs - w.start) < 5 * 60000)) continue;
+        if (sl.some(x => same(x, w.start, (w.distance || 0) / 1000))) continue;
         items.push({
           via: 'health', id: w.id, name: w.name, source: w.source, isRun: true, indoor: w.indoor,
           garmin: isGarminSource(w),

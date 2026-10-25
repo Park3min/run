@@ -19,6 +19,7 @@
 		A1B2C3D40000000000000002 /* RunlogHealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000001 /* RunlogHealthPlugin.swift */; };
 		A1B2C3D40000000000000004 /* RunlogViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000003 /* RunlogViewController.swift */; };
 		A1B2C3D40000000000000007 /* RunlogSharePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000006 /* RunlogSharePlugin.swift */; };
+		A1B2C3D40000000000000009 /* RunlogAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000008 /* RunlogAuthPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,7 @@
 		A1B2C3D40000000000000003 /* RunlogViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunlogViewController.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000005 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		A1B2C3D40000000000000006 /* RunlogSharePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunlogSharePlugin.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000008 /* RunlogAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunlogAuthPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +79,7 @@
 				A1B2C3D40000000000000001 /* RunlogHealthPlugin.swift */,
 				A1B2C3D40000000000000003 /* RunlogViewController.swift */,
 				A1B2C3D40000000000000006 /* RunlogSharePlugin.swift */,
+				A1B2C3D40000000000000008 /* RunlogAuthPlugin.swift */,
 				A1B2C3D40000000000000005 /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -174,6 +177,7 @@
 				A1B2C3D40000000000000002 /* RunlogHealthPlugin.swift in Sources */,
 				A1B2C3D40000000000000004 /* RunlogViewController.swift in Sources */,
 				A1B2C3D40000000000000007 /* RunlogSharePlugin.swift in Sources */,
+				A1B2C3D40000000000000009 /* RunlogAuthPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
