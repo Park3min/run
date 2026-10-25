@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>개인정보 처리방침 · 러닝로그</title>
+<meta name="description" content="러닝로그가 러닝 기록·건강 데이터·사진을 어떻게 다루는지 안내해요.">
+<style>
+  :root { --bg:#f2f4f6; --surface:#fff; --ink:#191f28; --ink-2:#333d4b; --muted:#6b7684; --line:#e5e8eb; --accent:#178a4c; --accent-text:#13824a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#101113; --surface:#1b1c1f; --ink:#f2f4f6; --ink-2:#d1d6db; --muted:#8b95a1; --line:#2c2e33; --accent-text:#3dbb73; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif; line-height:1.7; -webkit-font-smoothing:antialiased; }
+  main { max-width:720px; margin:0 auto; padding:calc(28px + env(safe-area-inset-top)) 16px 64px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; color:var(--ink); text-decoration:none; }
+  .brand svg { width:28px; height:28px; }
+  h1 { font-size:26px; margin:20px 0 4px; letter-spacing:-0.02em; }
+  .date { color:var(--muted); font-size:14px; margin:0 0 20px; }
+  section { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin:12px 0; }
+  h2 { font-size:17px; margin:0 0 8px; }
+  p, li { color:var(--ink-2); font-size:15px; }
+  ul { padding-left:20px; margin:6px 0; }
+  li { margin:4px 0; }
+  a { color:var(--accent-text); }
+  .lead { font-size:16px; color:var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="/">
+    <svg viewBox="0 0 600 600" aria-hidden="true"><rect width="600" height="600" fill="#178a4c"/><path d="M140 440 L255 305 L330 370 L455 200" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="square"/><rect x="412" y="158" width="86" height="86" fill="#fff"/></svg>
+    러닝로그
+  </a>
+  <h1>개인정보 처리방침</h1>
+  <p class="date">시행일 2026년 10월 25일</p>
+
+  <section>
+    <p class="lead">러닝로그는 회원 가입이 없고, 광고나 추적을 하지 않아요. 러닝 기록·건강 데이터·사진은 기기 안에서만 쓰고 저희 서버로 보내지 않아요.</p>
+  </section>
+
+  <section>
+    <h2>기기 안에서만 쓰는 정보</h2>
+    <ul>
+      <li><b>건강 앱 데이터</b> (아이폰 앱) — 사용자가 허락하면 건강 앱의 러닝 운동, GPS 경로, 심박수, 걸음 수, 거리를 <b>읽기만</b> 해요. 기록 카드와 지도 영상을 만드는 데에만 쓰고, 서버로 보내거나 광고·마케팅에 쓰거나 다른 곳에 제공하지 않아요. 건강 앱에 기록을 쓰지도 않아요.</li>
+      <li><b>사진</b> — 고른 사진은 기기 안에서 기록을 새겨 넣는 데에만 쓰고, 만든 이미지·영상은 사용자가 고른 곳(사진 앱, 공유한 앱)에만 저장돼요.</li>
+      <li><b>직접 입력한 기록과 설정</b> — 기기(브라우저 저장소)에만 저장돼요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>기기 밖으로 나가는 요청</h2>
+    <ul>
+      <li><b>지도·지형 그림</b> — 지도 여정을 그릴 때 보이는 지역의 지도 조각을 <a href="https://operations.osmfoundation.org/policies/tiles/">OpenStreetMap</a>에서, 지형 높이 조각을 Amazon Web Services(공개 지형 데이터)에서 받아요. 요청에는 지도 조각의 위치(확대 단계·가로·세로 번호)가 들어가며, 각 서비스의 운영 정책에 따라 접속 기록이 남을 수 있어요.</li>
+      <li><b>방문자 수</b> — 오늘·전체 방문자 수를 세려고 기기에서 만든 무작위 번호와 날짜만 보내요. 이름·연락처·위치 같은 개인을 알아볼 수 있는 정보는 없어요.</li>
+      <li><b>가민 커넥트 연결</b> (웹과 일부 시험용 앱에만 있어요. App Store 앱에는 없어요) — 사용자가 직접 연결하면 가민 로그인 정보와 활동 기록이 저희 중계 서버를 거쳐 가민 서버와 오가요. 중계 서버는 아무것도 저장하지 않고, 연결 정보는 기기에만 저장돼요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>아이폰 앱이 묻는 권한</h2>
+    <ul>
+      <li><b>건강</b> — 러닝 기록을 불러오기 위해 읽기 권한만 요청해요.</li>
+      <li><b>사진</b> — 기록을 새길 사진을 고르고, 만든 이미지·영상을 저장할 때 써요.</li>
+      <li><b>카메라</b> — 기록을 새길 사진을 바로 찍을 때만 써요.</li>
+    </ul>
+    <p>권한은 언제든 아이폰 설정에서 끌 수 있어요. 건강 권한은 설정 → 건강 → 데이터 접근 및 기기 → 러닝로그에서 바꿀 수 있어요.</p>
+  </section>
+
+  <section>
+    <h2>보관과 삭제</h2>
+    <p>저희가 따로 보관하는 개인정보는 없어요. 기기에 남은 기록과 설정은 앱의 '초기화'를 누르거나 앱을 지우면 함께 지워져요.</p>
+  </section>
+
+  <section>
+    <h2>문의</h2>
+    <p>궁금한 점은 <a href="https://github.com/Park3min/run/issues">GitHub 이슈</a>나 인스타그램 <a href="https://www.instagram.com/pki_runner/">@pki_runner</a>로 남겨 주세요.</p>
+    <p>이 방침이 바뀌면 이 페이지에 시행일과 함께 알려 드려요.</p>
+  </section>
+</main>
+</body>
+</html>

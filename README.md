@@ -62,7 +62,10 @@ xcrun simctl launch booted com.park3min.runlog -seedHealthDemo YES
 2. `cd ios-app && npm run testflight` — 웹 파일 반영 → 릴리스 아카이브 → 업로드 (빌드 번호는 날짜·시각으로 자동)
 3. App Store Connect → TestFlight 에서 처리(10~30분)가 끝나면 내부 테스터에 추가 → 아이폰 TestFlight 앱에서 설치
 
-웹 코드를 고친 뒤 앱에도 반영하려면 2번만 다시 실행하면 돼요. 암호화 규정 답변은 `ITSAppUsesNonExemptEncryption=false` 로 자동 처리돼요.
+웹 코드를 고친 뒤 앱에도 반영하려면 2번만 다시 실행하면 돼요.
+
+App Store 에 낼 빌드는 `npm run appstore` — 가민 커넥트 연결(비공식 로그인)을 숨긴 빌드예요(`RUNLOG_GARMIN=NO`). 내부 시험용 `npm run testflight` 빌드에는 가민 연결이 그대로 있어요.
+개인정보 처리방침·도움말은 `privacy.html`·`support.html`, 심사용 예시 경로는 `samples/runlog-sample.gpx`(가상 경로). 암호화 규정 답변은 `ITSAppUsesNonExemptEncryption=false` 로 자동 처리돼요.
 
 ## 구성
 
