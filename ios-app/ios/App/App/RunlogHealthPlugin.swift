@@ -11,6 +11,8 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "RunlogHealth"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isAvailable", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "connect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "listWorkouts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getWorkout", returnType: CAPPluginReturnPromise),
     ]
@@ -25,6 +27,25 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["available": HKHealthStore.isHealthDataAvailable()])
     }
 
+    private var readTypes: Set<HKObjectType> {
+        [HKObjectType.workoutType(), HKSeriesType.workoutRoute(), hrType, stepType, distType]
+    }
+
+    /// 연결 상태 — 권한을 이미 물어봤는지 ({asked}). 읽기 허용 여부 자체는 iOS 가 알려 주지 않는다.
+    @objc func status(_ call: CAPPluginCall) {
+        guard HKHealthStore.isHealthDataAvailable() else { call.resolve(["asked": false, "available": false]); return }
+        store.getRequestStatusForAuthorization(toShare: [], read: readTypes) { st, _ in
+            call.resolve(["asked": st == .unnecessary, "available": true])
+        }
+    }
+
+    /// '앱 연결'의 연결하기 — 권한 창을 띄운다
+    @objc func connect(_ call: CAPPluginCall) {
+        authorize { err in
+            if let err = err { call.reject(err.localizedDescription) } else { call.resolve() }
+        }
+    }
+
     /// 읽기 권한 요청 — 이미 답한 적이 있으면 바로 끝난다.
     /// (읽기 권한은 개인정보 보호를 위해 허용 여부를 알려 주지 않으므로, 거부되면 그냥 빈 목록이 온다)
     private func authorize(_ done: @escaping (Error?) -> Void) {
@@ -32,8 +53,7 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             done(NSError(domain: "RunlogHealth", code: 1, userInfo: [NSLocalizedDescriptionKey: "이 기기에서는 건강 앱을 쓸 수 없어요"]))
             return
         }
-        let read: Set<HKObjectType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute(), hrType, stepType, distType]
-        store.requestAuthorization(toShare: nil, read: read) { _, err in done(err) }
+        store.requestAuthorization(toShare: nil, read: readTypes) { _, err in done(err) }
     }
 
     @objc func listWorkouts(_ call: CAPPluginCall) {
