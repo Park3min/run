@@ -812,6 +812,9 @@ void main(){
         if (pt) this.kms.push({ m, km: m / 1000, x: pt.x, y: pt.y });
       }
       this._placeKms(u, W, H);
+      // 1km 구간 페이스 미니 막대 (선택) — 두 구간 이상일 때만
+      const sp = this.opt.splitBars && this.opt.overlay ? splits(route) : [];
+      this.splitList = sp.length >= 2 ? sp : null;
       if (this.is3d) this._setup3d(total, W, H);
     }
 
@@ -1315,6 +1318,15 @@ void main(){
       ctx.font = font(700, u * 4.2); ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillText('km', pad + dW + u * 0.8, statsY + u * 11);
 
+      // 1km 구간 페이스 미니 막대 — 거리 숫자 오른쪽. 그 구간을 달리는 동안 막대가 차오른다.
+      if (this.splitList) {
+        ctx.font = font(800, u * 13);
+        const fullW = ctx.measureText((o.dist || 0).toFixed(2)).width;   // 다 찼을 때 숫자 폭 기준 (흔들림 방지)
+        ctx.font = font(700, u * 4.2);
+        const x0 = pad + fullW + u * 0.8 + ctx.measureText('km').width + u * 4;
+        this._drawSplitBars(ctx, x0, statsY, W - pad - x0, e, font);
+      }
+
       // 시간·페이스는 실제 진행에 맞춰 흐르고, 심박·케이던스는 그 지점의 값을 보여주다가
       // 도착하면 평균으로 바뀐다 (거리별 기록이 없으면 처음부터 평균).
       const ser = (route && route.series) || {};
@@ -1344,6 +1356,42 @@ void main(){
         ctx.font = font(800, u * 4.3 * k); ctx.fillStyle = '#fff';
         ctx.fillText(val, x, ly + u * 5 * k);
         x += widths[i] + gap;
+      });
+      ctx.restore();
+    }
+
+    // 막대 높이: 빠를수록 높게(35~100%), 색: 페이스 색이면 빠름 연두 → 느림 빨강, 단색이면 강조색
+    _drawSplitBars(ctx, x0, top, availW, e, font) {
+      const sp = this.splitList, u = this.view.u;
+      if (availW < u * 12) return;                       // 숫자가 길어 자리가 모자라면 생략
+      const units = sp.reduce((a, s) => a + Math.max(0.3, Math.min(1, s.distanceKm)), 0);
+      const slot = Math.min(u * 3.4, availW / units);    // 1km 한 칸 폭
+      const gap = Math.min(u * 0.7, slot * 0.28);
+      const paces = sp.map(s => s.paceSec);
+      const fast = Math.min(...paces), slow = Math.max(...paces), span = slow - fast;
+      const by = top + u * 11, maxH = u * 7.6;
+      ctx.save();
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = font(600, u * 2.3); ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      ctx.fillText('1km 구간', x0, top + u * 2.2);
+      ctx.shadowBlur = u * 0.6;
+      const run = (this.route.totalM || 0) * e;
+      let x = x0, d = 0;
+      sp.forEach(s => {
+        const len = s.distanceKm * 1000, w = Math.max(u * 0.6, (slot - gap) * Math.max(0.3, Math.min(1, s.distanceKm)));
+        const f = Math.max(0, Math.min(1, (run - d) / len));
+        const r = span > 0 ? (s.paceSec - fast) / span : 0;   // 0 빠름 → 1 느림
+        const h = maxH * (1 - 0.65 * r);
+        // 바탕(빈 막대) — 아직 달리지 않은 구간도 자리를 보여 준다
+        ctx.globalAlpha = 0.18; ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.roundRect(x, by - h, w, h, Math.min(w / 2, u * 0.5)); ctx.fill();
+        if (f > 0) {
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = this.opt.color === 'pace' ? PALETTE[Math.round(r * (BUCKETS - 1))] : ACCENT;
+          const fh = h * f;
+          ctx.beginPath(); ctx.roundRect(x, by - fh, w, fh, Math.min(w / 2, u * 0.5, fh / 2)); ctx.fill();
+        }
+        x += w + gap; d += len;
       });
       ctx.restore();
     }
