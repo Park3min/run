@@ -2784,6 +2784,7 @@
     b3.disabled = true; b3.title = '이 브라우저는 3D 보기를 지원하지 않아요';
   }
   syncMapControls();
+  if (state.route) showExportTab('map');   // 저장된 경로가 있으면 다시 열어도 '지도 여정'부터
   goStep(1);
   // 창 크기가 바뀌면 지도 미리보기 해상도를 다시 맞춘다
   let mapResizeT = 0;
