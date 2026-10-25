@@ -1,0 +1,17 @@
+{
+  "name": "runlog-ios",
+  "private": true,
+  "description": "러닝로그 아이폰 앱 — 웹 코드(../index.html 등)를 그대로 감싼 Capacitor 앱",
+  "scripts": {
+    "web": "node scripts/copy-web.mjs",
+    "sync": "npm run web && npx cap sync ios",
+    "open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "appId": "com.park3min.runlog",
+  "appName": "러닝로그",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

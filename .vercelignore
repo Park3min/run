@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 .claude/
 README.md
+
+# 아이폰 앱(Capacitor) — 웹 배포 대상 아님
+ios-app/

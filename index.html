@@ -632,6 +632,15 @@
       <!-- [2] 자동 입력 — 핵심 기능이라 최상단에 강조 배치 -->
       <div class="field">
         <div class="import-actions">
+          <!-- 아이폰 앱에서만 보임 (건강 앱 연동은 웹에서 쓸 수 없음) -->
+          <button class="import-btn" id="btnHealth" type="button" hidden>
+            <span class="ib-ico">
+              <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+            </span>
+            <span>건강 앱에서 가져오기
+              <span class="ib-sub">애플워치 등으로 기록한 러닝과 GPS 경로를 불러와요</span>
+            </span>
+          </button>
           <button class="import-btn" id="btnGarmin" type="button">
             <span class="ib-ico">
               <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><polyline points="12 10 12 12 13 13"/><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"/><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/></svg>
@@ -1496,8 +1505,9 @@
         durationMs: mapDurationMs(), holdMs: 1500,
         onProgress: f => { $('mapStatus').textContent = `영상 만드는 중… ${Math.round(f * 100)}% (화면이 켜져 있어야 해요)`; },
       });
-      await saveBlob(blob, fileName('route-').replace(/\.png$/, '.' + ext));
-      $('mapStatus').textContent = ext === 'mp4' ? '영상을 저장했어요 (MP4)'
+      const saved = await saveBlob(blob, fileName('route-').replace(/\.png$/, '.' + ext));
+      $('mapStatus').textContent = saved === false ? '영상을 저장하지 않았어요. 다시 누르면 새로 만들어요'
+        : ext === 'mp4' ? '영상을 저장했어요 (MP4)'
         : '영상을 저장했어요 (WebM — 인스타에 올리려면 MP4 로 변환이 필요할 수 있어요)';
     } catch (e) {
       $('mapStatus').textContent = `✕ 영상을 만들지 못했어요. 다시 눌러 주세요 (${e.message || e})`;
@@ -1578,43 +1588,47 @@
     $('csvStatus').textContent = `${file.name} 읽는 중…`;
     try {
       const { name, pts } = RM.parseTrackFile(await file.text());
-      const route = RM.analyze(pts);
-      if (route.totalM < 50) throw new Error('경로 거리가 너무 짧아요');
-
-      clearInputFields();
-      $('inDist').value = (route.totalM / 1000).toFixed(2);
-      if (route.movingS) $('inTime').value = fmtTime(route.movingS);
-      if (route.avgHr) $('inHr').value = route.avgHr;
-      if (route.avgCad) $('inCad').value = route.avgCad;
-      if (route.elevGain) $('inElev').value = route.elevGain;
-      if (name) $('inTitle').value = name;
-      if (route.startT) {
-        const d = new Date(route.startT);
-        $('inDate').value = ymd(d);
-        $('inStartTime').value = hm(d);
-      }
-      const laps = RM.splits(route);
-      if (laps.length > 1) {
-        $('inSplits').value = laps.map(l => paceToInput(l.paceSec)).join('\n');
-        state.lapLabels = buildLapLabels(laps);
-      }
-      syncPickerLabels();
-
-      state.series = route.series || null;
-      if (route.movingS) {
-        const ok = applyRecord();
-        $('csvStatus').textContent =
-          `✓ ${file.name} — ${(route.totalM / 1000).toFixed(2)}km · ${fmtTime(route.movingS)}` +
-          `${laps.length > 1 ? ` · 구간 ${laps.length}개` : ''} 불러왔어요 · 값이 맞는지 확인해 주세요`;
-        if (ok) setTimeout(() => goStep(2, { note: $('csvStatus').textContent }), 0);
-      } else {
-        $('csvStatus').textContent = `△ ${file.name} — 시간 기록이 없는 경로예요. 시간을 입력하고 '다음 단계'를 눌러 주세요`;
-        setFold($('formToggle'), true);
-      }
-      setRoute(route);
+      loadTrack(name, pts, file.name);
     } catch (e) {
       $('csvStatus').textContent = `✕ ${e.message || '파일을 읽지 못했어요'}`;
     }
+  }
+  // 점 목록 [{lat, lon, t, hr, cad, ele}] → 기록·구간·지도 채우기 (GPX 파일과 건강 앱이 함께 쓴다)
+  function loadTrack(name, pts, label) {
+    const route = RM.analyze(pts);
+    if (route.totalM < 50) throw new Error('경로 거리가 너무 짧아요');
+
+    clearInputFields();
+    $('inDist').value = (route.totalM / 1000).toFixed(2);
+    if (route.movingS) $('inTime').value = fmtTime(route.movingS);
+    if (route.avgHr) $('inHr').value = route.avgHr;
+    if (route.avgCad) $('inCad').value = route.avgCad;
+    if (route.elevGain) $('inElev').value = route.elevGain;
+    if (name) $('inTitle').value = name;
+    if (route.startT) {
+      const d = new Date(route.startT);
+      $('inDate').value = ymd(d);
+      $('inStartTime').value = hm(d);
+    }
+    const laps = RM.splits(route);
+    if (laps.length > 1) {
+      $('inSplits').value = laps.map(l => paceToInput(l.paceSec)).join('\n');
+      state.lapLabels = buildLapLabels(laps);
+    }
+    syncPickerLabels();
+
+    state.series = route.series || null;
+    if (route.movingS) {
+      const ok = applyRecord();
+      $('csvStatus').textContent =
+        `✓ ${label} — ${(route.totalM / 1000).toFixed(2)}km · ${fmtTime(route.movingS)}` +
+        `${laps.length > 1 ? ` · 구간 ${laps.length}개` : ''} 불러왔어요 · 값이 맞는지 확인해 주세요`;
+      if (ok) setTimeout(() => goStep(2, { note: $('csvStatus').textContent }), 0);
+    } else {
+      $('csvStatus').textContent = `△ ${label} — 시간 기록이 없는 경로예요. 시간을 입력하고 '다음 단계'를 눌러 주세요`;
+      setFold($('formToggle'), true);
+    }
+    setRoute(route);
   }
   const openGpx = () => $('gpxInput').click();
   $('btnGpx').addEventListener('click', openGpx);
@@ -1629,7 +1643,7 @@
   const GARMIN_BASE = 'http://localhost:5077';
   const GARMIN_PROXY = localStorage.getItem('garminProxyUrl') || 'https://garmin-proxy.kipi2000.workers.dev';
   const proxyReady = !GARMIN_PROXY.includes('PLACEHOLDER');
-  let gSource = 'local'; // 'local' | 'web'
+  let gSource = 'local'; // 'local' | 'web' | 'health'(아이폰 앱)
   let gw = null;
   const getGw = () => {
     if (!gw && window.GarminWeb && proxyReady) gw = new GarminWeb(GARMIN_PROXY);
@@ -1743,7 +1757,7 @@
         `<div class="g-meta">${escapeHtml((a.start || '').slice(0, 16))} · ` +
         `${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)}` +
         `${a.avgHr ? ` · ♥ ${a.avgHr}` : ''}${a.elevGain ? ` · ▲ ${a.elevGain}m` : ''}</div>`;
-      b.addEventListener('click', () => pickGarminActivity(a));
+      b.addEventListener('click', () => (gSource === 'health' ? pickHealthWorkout(a) : pickGarminActivity(a)));
       list.appendChild(b);
     });
     $('gwLogout').style.display = gSource === 'web' ? '' : 'none';
@@ -1807,6 +1821,68 @@
     if (route) setRoute(route);
     else $('mapEmptyNote').textContent = '이 활동은 GPS 경로가 없어요 (트레드밀·실내 러닝). 지도 여정은 야외에서 GPS 로 기록한 활동에서 만들 수 있어요';
     $('csvStatus').textContent = route ? `${head} · 지도 여정도 만들었어요` : `${head} · GPS 경로가 없는 활동이라 기록만 채웠어요`;
+    if (ok) goStep(2, { note: $('csvStatus').textContent });
+  }
+
+  // ---------- 건강 앱 (아이폰 앱 전용 — 네이티브 플러그인 RunlogHealth) ----------
+  const Health = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+    ? (window.Capacitor.Plugins || {}).RunlogHealth : null;
+  if (Health) {
+    $('btnHealth').hidden = false;
+    $('btnHealth').addEventListener('click', async () => {
+      $('csvStatus').textContent = '건강 앱에서 러닝 기록을 찾는 중…';
+      try {
+        const { workouts } = await Health.listWorkouts({ limit: 30 });
+        gSource = 'health';
+        openGarminPicker(workouts.map(w => ({
+          id: w.id, name: w.name, isRun: true, hasGps: !w.indoor,
+          start: localIso(new Date(w.start)),
+          distanceKm: (w.distance || 0) / 1000, durationSec: w.duration || 0,
+          avgHr: w.avgHr ? Math.round(w.avgHr) : null,
+          elevGain: w.elevGain ? Math.round(w.elevGain) : null,
+        })));
+        $('csvStatus').textContent = '';
+      } catch (e) {
+        $('csvStatus').textContent = `✕ ${e.message || '건강 앱 기록을 읽지 못했어요'}`;
+      }
+    });
+  }
+  const localIso = d => `${ymd(d)} ${hm(d)}`;
+
+  // 경로 점에 같은 시각의 심박·케이던스를 붙인다 (심박은 직전 측정값, 케이던스는 걸음 수 구간의 분당 걸음)
+  function healthPts(w) {
+    const hr = w.hr || [], steps = w.steps || [];
+    let hi = 0, si = 0;
+    return (w.pts || []).map(([lat, lon, t, ele]) => {
+      while (hi + 1 < hr.length && hr[hi + 1][0] <= t) hi++;
+      while (si < steps.length && steps[si][1] < t) si++;
+      const h = hr.length && hr[hi][0] <= t && t - hr[hi][0] < 60000 ? hr[hi][1] : null;
+      const s = steps[si] && steps[si][0] <= t ? steps[si] : null;
+      const cad = s && s[1] - s[0] > 0 ? s[2] / ((s[1] - s[0]) / 60000) : null;
+      return { lat, lon, t, ele, hr: h, cad: cad > 60 && cad < 260 ? cad : null };
+    });
+  }
+
+  async function pickHealthWorkout(a) {
+    $('gModal').classList.remove('show');
+    $('csvStatus').textContent = `${a.name} 불러오는 중…`;
+    try {
+      const w = await Health.getWorkout({ id: a.id });
+      const pts = healthPts(w);
+      if (pts.length > 1) { loadTrack(a.name, pts, a.name); return; }
+    } catch (e) { /* 경로 없이 요약만 채운다 */ }
+    // 실내 러닝 등 경로가 없으면 요약 값만
+    clearInputFields();
+    $('inDist').value = a.distanceKm.toFixed(2);
+    $('inTime').value = fmtTime(a.durationSec);
+    if (a.avgHr) $('inHr').value = a.avgHr;
+    if (a.elevGain) $('inElev').value = a.elevGain;
+    $('inTitle').value = a.name;
+    $('inDate').value = a.start.slice(0, 10); $('inStartTime').value = a.start.slice(11, 16);
+    syncPickerLabels();
+    const ok = applyRecord();
+    $('mapEmptyNote').textContent = '이 활동은 GPS 경로가 없어요 (트레드밀·실내 러닝). 지도 여정은 야외에서 GPS 로 기록한 활동에서 만들 수 있어요';
+    $('csvStatus').textContent = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러왔어요 · GPS 경로가 없는 활동이라 기록만 채웠어요`;
     if (ok) goStep(2, { note: $('csvStatus').textContent });
   }
 
@@ -2309,8 +2385,20 @@
     if (!blob) { $('csvStatus').textContent = '✕ 이미지를 만들지 못했어요.'; return; }
     await saveBlob(blob, fileName(suffix));
   }
-  // 이미지·영상 공용 저장
+  // 이미지·영상 공용 저장 — 공유 시트를 닫기만 하면 false
   async function saveBlob(blob, name) {
+    // 아이폰 앱: 앱이 직접 공유 시트를 연다 (영상은 만드는 데 몇 초 걸려 웹 공유가 막힌다)
+    const NativeShare = window.Capacitor && (window.Capacitor.Plugins || {}).RunlogShare;
+    if (NativeShare) {
+      const data = await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(String(fr.result).split(',')[1]);
+        fr.onerror = rej;
+        fr.readAsDataURL(blob);
+      });
+      const r = await NativeShare.share({ data, name });
+      return !!(r && r.completed);
+    }
     const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
     // 모바일: 공유 시트로 '사진 저장' — 가장 확실한 경로
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
