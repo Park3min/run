@@ -238,16 +238,19 @@
       return JSON.parse(r.text);
     }
 
-    async getActivities(limit = 20) {
+    // extra: { startDate, endDate } (YYYY-MM-DD) 로 날짜 범위를 좁힐 수 있다
+    async getActivities(limit = 20, extra = {}) {
       const RUN_TYPES = new Set(['running', 'treadmill_running', 'trail_running', 'track_running',
         'indoor_running', 'virtual_run', 'street_running']);
-      const acts = await this.api('/activitylist-service/activities/search/activities', { start: 0, limit });
+      const acts = await this.api('/activitylist-service/activities/search/activities', { start: 0, limit, ...extra });
       return acts.map(a => {
         const type = ((a.activityType || {}).typeKey || '').toLowerCase();
         return {
           id: a.activityId,
           name: a.activityName || '러닝',
           start: a.startTimeLocal || '',
+          // 절대 시각(ms) — 건강 앱 기록과 같은 러닝인지 맞춰 볼 때 쓴다
+          startMs: a.startTimeGMT ? Date.parse(a.startTimeGMT.replace(' ', 'T') + 'Z') : null,
           distanceKm: Math.round((a.distance || 0) / 10) / 100,
           durationSec: Math.round(a.duration || 0),
           avgHr: Math.round(a.averageHR || 0),

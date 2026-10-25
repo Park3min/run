@@ -73,6 +73,7 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             "duration": w.duration,
             "indoor": indoor,
             "source": w.sourceRevision.source.name,
+            "bundle": w.sourceRevision.source.bundleIdentifier,
         ]
         var meters: Double?
         if #available(iOS 16.0, *) {

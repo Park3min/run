@@ -1079,7 +1079,7 @@
 
 <!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
      JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
-<script src="garmin-web.js?v=de20ef6b"></script>
+<script src="garmin-web.js?v=c0cb0cfa"></script>
 <script src="route-map.js?v=cefadc53"></script>
 <script>
 (() => {
@@ -1834,9 +1834,12 @@
       try {
         const { workouts } = await Health.listWorkouts({ limit: 30 });
         gSource = 'health';
+        const gConnected = !!(getGw() && gw.hasAuth());
         openGarminPicker(workouts.map(w => ({
           id: w.id, name: w.name, source: w.source, isRun: true, indoor: w.indoor,
-          hasGps: w.hasRoute != null ? w.hasRoute : !w.indoor,
+          garmin: isGarminSource(w),
+          // 가민이 연결돼 있으면 가민 기록은 가민에서 경로를 받아 오므로 야외면 지도가 나온다
+          hasGps: isGarminSource(w) && gConnected ? !w.indoor : (w.hasRoute != null ? w.hasRoute : !w.indoor),
           start: localIso(new Date(w.start)), startMs: w.start,
           distanceKm: (w.distance || 0) / 1000, durationSec: w.duration || 0,
           avgHr: w.avgHr ? Math.round(w.avgHr) : null,
@@ -1849,6 +1852,16 @@
     });
   }
   const localIso = d => `${ymd(d)} ${hm(d)}`;
+  // 가민 커넥트 앱이 건강 앱에 넣은 기록 — 건강 앱엔 심박(최고·최저만)·GPS 경로가 빠져 있다
+  const isGarminSource = w => /garmin/i.test(`${w.bundle || ''} ${w.source || ''}`);
+
+  // 같은 러닝의 가민 활동 찾기 — 시작 시각이 5분 안으로 가장 가까운 것
+  async function findGarminTwin(startMs) {
+    const day = ms => ymd(new Date(ms));
+    const acts = await gw.getActivities(20, { startDate: day(startMs - 86400000), endDate: day(startMs + 86400000) });
+    const near = acts.filter(x => x.startMs).sort((p, q) => Math.abs(p.startMs - startMs) - Math.abs(q.startMs - startMs))[0];
+    return near && Math.abs(near.startMs - startMs) < 5 * 60000 ? near : null;
+  }
 
   // 경로 점에 같은 시각의 심박·케이던스를 붙인다 (심박은 직전 측정값, 케이던스는 걸음 수 구간의 분당 걸음)
   function healthPts(w) {
@@ -1866,6 +1879,24 @@
 
   async function pickHealthWorkout(a) {
     $('gModal').classList.remove('show');
+    // 가민 기록이면 가민 연결로 심박·케이던스·경로·구간까지 채운다
+    let garminWhy = '';
+    if (a.garmin) {
+      if (getGw() && gw.hasAuth()) {
+        $('csvStatus').textContent = '가민 커넥트에서 같은 러닝의 심박·경로를 찾는 중…';
+        try {
+          const twin = await findGarminTwin(a.startMs);
+          if (twin) { gSource = 'web'; await pickGarminActivity(twin); return; }
+          garminWhy = '가민 커넥트에서 같은 러닝을 찾지 못해 건강 앱 기록으로 채웠어요';
+        } catch (e) {
+          garminWhy = /로그인|만료/.test(e.message || '')
+            ? "가민 연결이 끊겼어요. '가민 커넥트에서 가져오기'로 다시 연결하면 심박·경로까지 들어와요"
+            : '가민 커넥트에 연결하지 못해 건강 앱 기록으로 채웠어요';
+        }
+      } else {
+        garminWhy = "가민 기록은 건강 앱에 심박·GPS 경로가 넘어오지 않아요. '가민 커넥트에서 가져오기'로 한 번 연결하면 다음부터 자동으로 채워져요";
+      }
+    }
     $('csvStatus').textContent = `${a.name} 불러오는 중…`;
     let w = null;
     try {
@@ -1896,7 +1927,8 @@
     syncPickerLabels();
     const ok = applyRecord();
     // 야외 러닝인데 경로가 없으면, 기록한 앱이 건강 앱에 경로를 넘기지 않은 경우다 (예: 폰만으로 기록한 일부 앱)
-    const why = a.indoor ? 'GPS 경로가 없는 실내 러닝이에요' : `건강 앱에 이 러닝의 GPS 경로가 없어요${a.source ? ` (${a.source} 기록)` : ''}`;
+    const why = garminWhy || (a.indoor ? 'GPS 경로가 없는 실내 러닝이에요'
+      : `건강 앱에 이 러닝의 GPS 경로가 없어요${a.source ? ` (${a.source} 기록)` : ''}`);
     $('mapEmptyNote').textContent = `${why}. 지도 여정은 GPS 경로가 있는 기록에서 만들 수 있어요`;
     $('csvStatus').textContent = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러왔어요 · ${why}. 기록만 채웠어요`;
     if (ok) goStep(2, { note: $('csvStatus').textContent });
