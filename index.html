@@ -191,6 +191,7 @@
     padding: 14px 16px; cursor: pointer; text-align: left;
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
   }
+  .import-btn[hidden], .icon-btn[hidden] { display: none; }   /* display:flex 가 hidden 속성을 덮지 않게 */
   .import-btn:hover { border-color: var(--accent); }
   .import-btn:active { transform: scale(0.99); }
   .import-btn .ib-ico {
@@ -514,6 +515,34 @@
   .g-item .g-tag.off { background: transparent; color: var(--muted); border: 1px solid var(--border); }
   .modal-box .btn { margin-top: 14px; }
 
+  /* ---- 앱 연결 (아이폰 앱 전용) ---- */
+  header { position: relative; }
+  .icon-btn {
+    position: absolute; top: -6px; right: -8px;
+    width: 44px; height: 44px; border: none; border-radius: 12px;
+    background: transparent; color: var(--ink-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:active { background: var(--surface-2); }
+  .conn-lead { font-size: 14px; color: var(--muted); margin: -6px 0 14px; }
+  .conn-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+  .conn-row {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 12px 12px 14px;
+  }
+  .conn-ico {
+    width: 38px; height: 38px; border-radius: 10px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: var(--accent-ink);
+  }
+  .conn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .conn-text b { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .conn-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .conn-state { font-size: 12px; font-weight: 700; color: var(--accent-text); }
+  .conn-state.off { color: var(--muted); font-weight: 600; }
+  .modal-box .conn-row .btn { margin-top: 0; flex: none; width: auto; white-space: nowrap; padding: 9px 12px; font-size: 13px; }
+
   /* ---- capture mode ---- */
   .cap-overlay {
     display: none;
@@ -599,6 +628,10 @@
 <body>
 <div class="wrap">
   <header>
+    <!-- 앱 연결 (아이폰 앱에서만 보임) -->
+    <button type="button" class="icon-btn" id="btnConn" hidden aria-label="앱 연결">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
     <h1>
       <svg class="logo" viewBox="0 0 600 600" role="img" aria-label="러닝로그 로고">
         <rect width="600" height="600" fill="#178a4c"/>
@@ -637,8 +670,8 @@
             <span class="ib-ico">
               <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
             </span>
-            <span>건강 앱에서 가져오기
-              <span class="ib-sub">애플워치 등으로 기록한 러닝과 GPS 경로를 불러와요</span>
+            <span><span id="btnHealthTitle">건강 앱에서 가져오기</span>
+              <span class="ib-sub" id="btnHealthSub">애플워치 등으로 기록한 러닝과 GPS 경로를 불러와요</span>
             </span>
           </button>
           <button class="import-btn" id="btnGarmin" type="button">
@@ -1008,6 +1041,32 @@
   </div>
 </div>
 
+<!-- 앱 연결 (아이폰 앱 전용) -->
+<div class="modal" id="connModal">
+  <div class="modal-box">
+    <h2>앱 연결</h2>
+    <p class="conn-lead" id="connLead">러닝 기록을 가져올 앱을 연결해 주세요</p>
+    <div class="conn-list">
+      <div class="conn-row">
+        <span class="conn-ico"><svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></span>
+        <span class="conn-text"><b>건강 앱</b>
+          <span class="conn-sub">애플워치·나이키 런 클럽·코로스 등 건강 앱에 기록을 남기는 앱의 러닝</span>
+          <span class="conn-state" id="connHealthState"></span></span>
+        <button type="button" class="btn secondary" id="connHealthBtn">연결하기</button>
+      </div>
+      <div class="conn-row">
+        <span class="conn-ico"><svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><polyline points="12 10 12 12 13 13"/><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"/><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/></svg></span>
+        <span class="conn-text"><b>가민 커넥트</b>
+          <span class="conn-sub">운동 중 심박·케이던스·GPS 경로·구간까지 가져와요</span>
+          <span class="conn-state" id="connGarminState"></span></span>
+        <button type="button" class="btn secondary" id="connGarminBtn">연결하기</button>
+      </div>
+    </div>
+    <div class="hint" id="connNote" style="margin-top:12px"></div>
+    <button class="btn secondary" type="button" id="connClose">닫기</button>
+  </div>
+</div>
+
 <!-- 가민 웹 로그인 -->
 <div class="modal" id="gwModal">
   <div class="modal-box">
@@ -1337,7 +1396,9 @@
     state.series = null;
     syncPickerLabels();
     setRoute(null);
-    $('mapEmptyNote').textContent = '가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요';
+    $('mapEmptyNote').textContent = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+      ? 'GPS 경로가 있는 러닝을 가져오면 바로 만들어져요'
+      : '가민 커넥트에서 GPS 기록이 있는 활동을 불러오면 바로 만들어져요';
   }
   // 입력·표시·상태 전체 초기화 (초기화 버튼)
   function resetRecord() {
@@ -1633,7 +1694,7 @@
   const openGpx = () => $('gpxInput').click();
   $('btnGpx').addEventListener('click', openGpx);
   $('btnGpxMap').addEventListener('click', openGpx);
-  $('btnGarminMap').addEventListener('click', () => $('btnGarmin').click());
+  $('btnGarminMap').addEventListener('click', () => (Health ? $('btnHealth') : $('btnGarmin')).click());
   $('gpxInput').addEventListener('change', () => {
     if ($('gpxInput').files[0]) handleTrackFile($('gpxInput').files[0]);
     $('gpxInput').value = '';
@@ -1643,7 +1704,7 @@
   const GARMIN_BASE = 'http://localhost:5077';
   const GARMIN_PROXY = localStorage.getItem('garminProxyUrl') || 'https://garmin-proxy.kipi2000.workers.dev';
   const proxyReady = !GARMIN_PROXY.includes('PLACEHOLDER');
-  let gSource = 'local'; // 'local' | 'web' | 'health'(아이폰 앱)
+  let gSource = 'local'; // 'local' | 'web' | 'apps'(아이폰 앱: 연결한 앱을 합친 목록)
   let gw = null;
   const getGw = () => {
     if (!gw && window.GarminWeb && proxyReady) gw = new GarminWeb(GARMIN_PROXY);
@@ -1705,7 +1766,12 @@
     $('gwStatus').textContent = '로그인 정보는 가민 서버로만 보내고, 연결 정보는 이 브라우저에만 저장돼요';
     $('gwModal').classList.add('show');
   }
-  $('gwCancel').addEventListener('click', () => $('gwModal').classList.remove('show'));
+  // 로그인 창을 '앱 연결'에서 열었으면 끝난 뒤 앱 연결 화면으로 돌아간다
+  let gwAfterLogin = null;
+  $('gwCancel').addEventListener('click', () => {
+    $('gwModal').classList.remove('show');
+    if (gwAfterLogin) { const f = gwAfterLogin; gwAfterLogin = null; f(false); }
+  });
   $('gwModal').addEventListener('click', e => {
     if (e.target === $('gwModal')) $('gwModal').classList.remove('show');
   });
@@ -1729,7 +1795,8 @@
       }
       $('gwPw').value = '';
       $('gwModal').classList.remove('show');
-      await loadWebActivities();
+      if (gwAfterLogin) { const f = gwAfterLogin; gwAfterLogin = null; f(true); }
+      else await loadWebActivities();
     } catch (e) {
       $('gwStatus').textContent = `✕ ${e.message}`;
     }
@@ -1757,7 +1824,11 @@
         `<div class="g-meta">${a.source ? `${escapeHtml(a.source)} · ` : ''}${escapeHtml((a.start || '').slice(0, 16))} · ` +
         `${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)}` +
         `${a.avgHr ? ` · ♥ ${a.avgHr}` : ''}${a.elevGain ? ` · ▲ ${a.elevGain}m` : ''}</div>`;
-      b.addEventListener('click', () => (gSource === 'health' ? pickHealthWorkout(a) : pickGarminActivity(a)));
+      b.addEventListener('click', () => {
+        if (a.via === 'health') return pickHealthWorkout(a);
+        if (a.via === 'garmin') gSource = 'web';
+        pickGarminActivity(a);
+      });
       list.appendChild(b);
     });
     $('gwLogout').style.display = gSource === 'web' ? '' : 'none';
@@ -1827,28 +1898,110 @@
   // ---------- 건강 앱 (아이폰 앱 전용 — 네이티브 플러그인 RunlogHealth) ----------
   const Health = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
     ? (window.Capacitor.Plugins || {}).RunlogHealth : null;
+  // 연결 상태: 건강 앱은 권한을 물은 적이 있고 사용자가 끄지 않았으면 연결, 가민은 저장된 로그인이 있으면 연결
+  let healthAsked = false;
+  const healthOn = () => !!Health && healthAsked && localStorage.getItem('runlog.healthOff') !== '1';
+  const garminOn = () => !!(getGw() && gw.hasAuth());
+
+  function renderConn() {
+    const h = healthOn(), g = garminOn();
+    $('connHealthState').textContent = h ? '연결됨' : '연결 안 됨';
+    $('connHealthState').className = 'conn-state' + (h ? '' : ' off');
+    $('connHealthBtn').textContent = h ? '연결 끊기' : '연결하기';
+    $('connGarminState').textContent = g ? '연결됨 · 건강 앱의 가민 기록도 심박·경로까지 채워요' : '연결 안 됨';
+    $('connGarminState').className = 'conn-state' + (g ? '' : ' off');
+    $('connGarminBtn').textContent = g ? '연결 끊기' : '연결하기';
+    const names = [h && '건강 앱', g && '가민 커넥트'].filter(Boolean);
+    $('btnHealthSub').textContent = names.length
+      ? `${names.join('·')}에서 러닝을 골라요` : '먼저 기록을 가져올 앱을 연결해 주세요';
+  }
+  function openConn(lead, note = '') {
+    $('connLead').textContent = lead || '러닝 기록을 가져올 앱을 연결해 주세요';
+    $('connNote').textContent = note;
+    renderConn();
+    $('connModal').classList.add('show');
+  }
+
   if (Health) {
+    // 아이폰 앱: '기록 가져오기' 하나로 연결한 앱을 모두 보여 주고, 가민 버튼은 '앱 연결'로 옮긴다
+    document.body.classList.add('native');
     $('btnHealth').hidden = false;
-    $('btnHealth').addEventListener('click', async () => {
-      $('csvStatus').textContent = '건강 앱에서 러닝 기록을 찾는 중…';
+    $('btnGarmin').hidden = true;
+    $('btnConn').hidden = false;
+    $('btnHealthTitle').textContent = '기록 가져오기';
+    $('btnHealth').querySelector('.ib-ico').innerHTML =
+      '<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>';
+    $('csvStatus').textContent = '연결한 앱에서 러닝을 고르면 기록과 지도 경로가 한 번에 채워져요';
+    $('btnGarminMap').textContent = '기록 가져오기';
+    $('mapEmptyNote').textContent = 'GPS 경로가 있는 러닝을 가져오면 바로 만들어져요';
+    Health.status().then(r => { healthAsked = !!(r && r.asked); renderConn(); }).catch(() => renderConn());
+    renderConn();
+
+    $('btnConn').addEventListener('click', () => openConn());
+    $('connClose').addEventListener('click', () => $('connModal').classList.remove('show'));
+    $('connModal').addEventListener('click', e => { if (e.target === $('connModal')) $('connModal').classList.remove('show'); });
+    $('connHealthBtn').addEventListener('click', async () => {
+      if (healthOn()) {
+        localStorage.setItem('runlog.healthOff', '1');
+        renderConn();
+        $('connNote').textContent = '건강 앱 연결을 끊었어요. 읽기 권한까지 끄려면 설정 → 건강 → 데이터 접근 및 기기 → 러닝로그에서 꺼 주세요';
+        return;
+      }
       try {
-        const { workouts } = await Health.listWorkouts({ limit: 30 });
-        gSource = 'health';
-        const gConnected = !!(getGw() && gw.hasAuth());
-        openGarminPicker(workouts.map(w => ({
-          id: w.id, name: w.name, source: w.source, isRun: true, indoor: w.indoor,
+        await Health.connect();
+        healthAsked = true;
+        localStorage.removeItem('runlog.healthOff');
+        renderConn();
+        $('connNote').textContent = '건강 앱을 연결했어요';
+      } catch (e) {
+        $('connNote').textContent = `✕ ${e.message || '건강 앱에 연결하지 못했어요'}`;
+      }
+    });
+    $('connGarminBtn').addEventListener('click', () => {
+      if (garminOn()) {
+        gw.logout();
+        renderConn();
+        $('connNote').textContent = '가민 커넥트 연결을 끊었어요';
+        return;
+      }
+      if (!getGw()) { $('connNote').textContent = '✕ 지금은 가민 연동을 쓸 수 없어요'; return; }
+      $('connModal').classList.remove('show');
+      gwAfterLogin = ok => openConn('', ok ? '가민 커넥트를 연결했어요' : '');
+      openGwLogin();
+    });
+
+    // 연결한 앱들의 러닝을 한 목록으로 — 건강 앱과 가민에 같은 러닝(가민이 건강 앱에 넘긴 것)이 있으면 가민 쪽 하나만
+    $('btnHealth').addEventListener('click', async () => {
+      const hOn = healthOn(), gOn = garminOn();
+      if (!hOn && !gOn) { openConn('먼저 기록을 가져올 앱을 연결해 주세요'); return; }
+      $('csvStatus').textContent = '연결한 앱에서 러닝 기록을 찾는 중…';
+      let hl = [], gl = [];
+      const fails = [];
+      await Promise.all([
+        hOn && Health.listWorkouts({ limit: 30 }).then(r => { hl = r.workouts || []; })
+          .catch(() => fails.push('건강 앱')),
+        gOn && gw.getActivities(20).then(r => { gl = r || []; })
+          .catch(e => fails.push(/로그인|만료/.test(e.message || '') ? '가민 커넥트(다시 연결해 주세요)' : '가민 커넥트')),
+      ]);
+      const items = gl.map(g => ({ ...g, via: 'garmin', source: 'Garmin Connect' }));
+      for (const w of hl) {
+        if (isGarminSource(w) && gl.some(g => g.startMs && Math.abs(g.startMs - w.start) < 5 * 60000)) continue;
+        items.push({
+          via: 'health', id: w.id, name: w.name, source: w.source, isRun: true, indoor: w.indoor,
           garmin: isGarminSource(w),
           // 가민이 연결돼 있으면 가민 기록은 가민에서 경로를 받아 오므로 야외면 지도가 나온다
-          hasGps: isGarminSource(w) && gConnected ? !w.indoor : (w.hasRoute != null ? w.hasRoute : !w.indoor),
+          hasGps: isGarminSource(w) && gOn ? !w.indoor : (w.hasRoute != null ? w.hasRoute : !w.indoor),
           start: localIso(new Date(w.start)), startMs: w.start,
           distanceKm: (w.distance || 0) / 1000, durationSec: w.duration || 0,
           avgHr: w.avgHr ? Math.round(w.avgHr) : null,
           elevGain: w.elevGain ? Math.round(w.elevGain) : null,
-        })));
-        $('csvStatus').textContent = '';
-      } catch (e) {
-        $('csvStatus').textContent = `✕ ${e.message || '건강 앱 기록을 읽지 못했어요'}`;
+        });
       }
+      items.sort((p, q) => (q.startMs || 0) - (p.startMs || 0));
+      gSource = 'apps';
+      $('csvStatus').textContent = fails.length ? `△ ${fails.join('·')}에서 기록을 읽지 못했어요` : '';
+      if (!items.length && fails.length) return;
+      openGarminPicker(items);
     });
   }
   const localIso = d => `${ymd(d)} ${hm(d)}`;
