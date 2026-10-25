@@ -5,7 +5,8 @@
   "scripts": {
     "web": "node scripts/copy-web.mjs",
     "sync": "npm run web && npx cap sync ios",
-    "open": "npx cap open ios"
+    "open": "npx cap open ios",
+    "testflight": "bash scripts/testflight.sh"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",
