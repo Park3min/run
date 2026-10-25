@@ -1075,6 +1075,18 @@
   </div>
 </div>
 
+<!-- 공유 준비 완료 — 웹 공유는 누른 직후에만 열려서, 오래 걸린 영상·지도는 한 번 더 눌러 공유 -->
+<div class="modal" id="shareModal" role="dialog" aria-labelledby="shareTitle">
+  <div class="modal-box">
+    <h2 id="shareTitle">영상이 준비됐어요</h2>
+    <p class="conn-lead" id="shareLead"></p>
+    <div class="row2">
+      <button class="btn secondary" type="button" id="shareFile">파일로 받기</button>
+      <button class="btn" type="button" id="shareGo">공유하기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 가민 웹 로그인 -->
 <div class="modal" id="gwModal">
   <div class="modal-box">
@@ -1557,8 +1569,8 @@
     r.set(state.route, Object.assign(mapOptions(), { transparent: state.map.style === 'none' }));
     r.p = 1;
     await r.ready();
-    await saveImage(cv, 'map-');
-    $('mapStatus').textContent = '이미지를 저장했어요';
+    const saved = await saveImage(cv, 'map-');
+    $('mapStatus').textContent = saved === false ? '이미지를 저장하지 않았어요. 다시 누르면 새로 만들어요' : '이미지를 저장했어요';
   });
 
   $('btnMapVideo').addEventListener('click', async () => {
@@ -2604,8 +2616,46 @@
   }
   async function saveImage(cv, suffix) {
     const blob = await canvasToBlob(cv);
-    if (!blob) { $('csvStatus').textContent = '✕ 이미지를 만들지 못했어요.'; return; }
-    await saveBlob(blob, fileName(suffix));
+    if (!blob) { $('csvStatus').textContent = '✕ 이미지를 만들지 못했어요.'; return false; }
+    return saveBlob(blob, fileName(suffix));
+  }
+  // 데스크톱/폴백: Blob URL 다운로드
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    // iOS Safari 등 download 미지원 시 새 탭으로 열어 길게 눌러 저장
+    setTimeout(() => { if (!('download' in a)) window.open(url, '_blank'); }, 0);
+  }
+  // 공유 시트는 버튼을 누른 직후에만 열린다. 영상 녹화·지도 받기처럼 몇 초 걸리면 막히므로
+  // 준비된 파일을 창에 띄워 '공유하기'를 한 번 더 누르게 한다. 닫으면 false.
+  function offerShare(file) {
+    return new Promise(resolve => {
+      const m = $('shareModal'), isVideo = (file.type || '').startsWith('video/');
+      $('shareTitle').textContent = isVideo ? '영상이 준비됐어요' : '이미지가 준비됐어요';
+      $('shareLead').textContent = `공유하기를 누르고 '${isVideo ? '비디오' : '이미지'} 저장'을 고르면 사진 앱에 저장돼요`;
+      const done = v => {
+        m.classList.remove('show');
+        $('shareGo').onclick = $('shareFile').onclick = m.onclick = null;
+        document.removeEventListener('keydown', onKey);
+        resolve(v);
+      };
+      const onKey = e => { if (e.key === 'Escape') done(false); };
+      $('shareGo').onclick = async () => {
+        try { await navigator.share({ files: [file] }); done(true); }
+        catch (e) {
+          if (e && e.name === 'AbortError') return;          // 공유 시트만 닫음 — 창은 그대로 두고 다시 고르게
+          done(true); downloadBlob(file, file.name);
+        }
+      };
+      $('shareFile').onclick = () => { done(true); downloadBlob(file, file.name); };
+      m.onclick = e => { if (e.target === m) done(false); };
+      document.addEventListener('keydown', onKey);
+      m.classList.add('show');
+      $('shareGo').focus();
+    });
   }
   // 이미지·영상 공용 저장 — 공유 시트를 닫기만 하면 false
   async function saveBlob(blob, name) {
@@ -2624,17 +2674,17 @@
     const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
     // 모바일: 공유 시트로 '사진 저장' — 가장 확실한 경로
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); return; }
-      catch (e) { if (e && e.name === 'AbortError') return; /* 폴백으로 진행 */ }
+      // 누른 지 오래돼 공유가 막힐 상황이면 바로 '한 번 더 누르기' 창으로
+      if (navigator.userActivation && !navigator.userActivation.isActive) return offerShare(file);
+      try { await navigator.share({ files: [file] }); return true; }
+      catch (e) {
+        if (e && e.name === 'AbortError') return false;
+        if (e && e.name === 'NotAllowedError') return offerShare(file);   // 사파리: 사용자 동작이 끝남
+        /* 그 밖의 오류는 다운로드로 */
+      }
     }
-    // 데스크톱/폴백: Blob URL 다운로드
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = name; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-    // iOS Safari 등 download 미지원 시 새 탭으로 열어 길게 눌러 저장
-    setTimeout(() => { if (!('download' in a)) window.open(url, '_blank'); }, 0);
+    downloadBlob(blob, name);
+    return true;
   }
   function makeStoryCanvas() {
     const sc = document.createElement('canvas');
