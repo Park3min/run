@@ -191,7 +191,7 @@
     padding: 14px 16px; cursor: pointer; text-align: left;
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
   }
-  .import-btn[hidden], .icon-btn[hidden] { display: none; }   /* display:flex 가 hidden 속성을 덮지 않게 */
+  .import-btn[hidden], .icon-btn[hidden], .conn-row[hidden] { display: none; }   /* display:flex 가 hidden 속성을 덮지 않게 */
   .import-btn:hover { border-color: var(--accent); }
   .import-btn:active { transform: scale(0.99); }
   .import-btn .ib-ico {
@@ -277,6 +277,8 @@
     color: var(--muted); font-size: 12px; font-weight: 500;
   }
   .site-foot .visits b { color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .foot-links { display: flex; justify-content: center; gap: 16px; margin-top: 8px; }
+  .foot-links a { color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
 
   /* [7] 결과 → 입력으로 돌아가기 */
   .back-link {
@@ -1026,6 +1028,11 @@
       <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
       오늘 <b id="visitToday">–</b> · 전체 <b id="visitTotal">–</b>
     </span>
+    <!-- 앱에서도 열리도록 전체 주소 (앱 안에선 사파리로 열림) -->
+    <nav class="foot-links">
+      <a href="https://runlog.park3min.com/support.html">도움말</a>
+      <a href="https://runlog.park3min.com/privacy.html">개인정보 처리방침</a>
+    </nav>
   </footer>
 </div>
 
@@ -1050,11 +1057,11 @@
       <div class="conn-row">
         <span class="conn-ico"><svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></span>
         <span class="conn-text"><b>건강 앱</b>
-          <span class="conn-sub">애플워치·나이키 런 클럽·코로스 등 건강 앱에 기록을 남기는 앱의 러닝</span>
+          <span class="conn-sub">애플워치·가민·나이키 런 클럽·코로스 등 건강 앱에 기록을 남기는 앱의 러닝</span>
           <span class="conn-state" id="connHealthState"></span></span>
         <button type="button" class="btn secondary" id="connHealthBtn">연결하기</button>
       </div>
-      <div class="conn-row">
+      <div class="conn-row" id="connGarminRow">
         <span class="conn-ico"><svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><polyline points="12 10 12 12 13 13"/><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"/><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/></svg></span>
         <span class="conn-text"><b>가민 커넥트</b>
           <span class="conn-sub">운동 중 심박·케이던스·GPS 경로·구간까지 가져와요</span>
@@ -1900,8 +1907,9 @@
     ? (window.Capacitor.Plugins || {}).RunlogHealth : null;
   // 연결 상태: 건강 앱은 권한을 물은 적이 있고 사용자가 끄지 않았으면 연결, 가민은 저장된 로그인이 있으면 연결
   let healthAsked = false;
+  let garminAllowed = true;   // App Store 출시 빌드는 가민 연결을 숨긴다 (Health.status 의 garmin)
   const healthOn = () => !!Health && healthAsked && localStorage.getItem('runlog.healthOff') !== '1';
-  const garminOn = () => !!(getGw() && gw.hasAuth());
+  const garminOn = () => garminAllowed && !!(getGw() && gw.hasAuth());
 
   function renderConn() {
     const h = healthOn(), g = garminOn();
@@ -1934,7 +1942,11 @@
     $('csvStatus').textContent = '연결한 앱에서 러닝을 고르면 기록과 지도 경로가 한 번에 채워져요';
     $('btnGarminMap').textContent = '기록 가져오기';
     $('mapEmptyNote').textContent = 'GPS 경로가 있는 러닝을 가져오면 바로 만들어져요';
-    Health.status().then(r => { healthAsked = !!(r && r.asked); renderConn(); }).catch(() => renderConn());
+    Health.status().then(r => {
+      healthAsked = !!(r && r.asked);
+      if (r && r.garmin === false) { garminAllowed = false; $('connGarminRow').hidden = true; }
+      renderConn();
+    }).catch(() => renderConn());
     renderConn();
 
     $('btnConn').addEventListener('click', () => openConn());
@@ -2034,8 +2046,8 @@
     $('gModal').classList.remove('show');
     // 가민 기록이면 가민 연결로 심박·케이던스·경로·구간까지 채운다
     let garminWhy = '';
-    if (a.garmin) {
-      if (getGw() && gw.hasAuth()) {
+    if (a.garmin && garminAllowed) {
+      if (garminOn()) {
         $('csvStatus').textContent = '가민 커넥트에서 같은 러닝의 심박·경로를 찾는 중…';
         try {
           const twin = await findGarminTwin(a.startMs);

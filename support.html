@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>도움말 · 러닝로그</title>
+<meta name="description" content="러닝로그 사용법과 자주 묻는 질문, 문의처를 안내해요.">
+<style>
+  :root { --bg:#f2f4f6; --surface:#fff; --ink:#191f28; --ink-2:#333d4b; --muted:#6b7684; --line:#e5e8eb; --accent:#178a4c; --accent-text:#13824a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#101113; --surface:#1b1c1f; --ink:#f2f4f6; --ink-2:#d1d6db; --muted:#8b95a1; --line:#2c2e33; --accent-text:#3dbb73; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif; line-height:1.7; -webkit-font-smoothing:antialiased; }
+  main { max-width:720px; margin:0 auto; padding:calc(28px + env(safe-area-inset-top)) 16px 64px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; color:var(--ink); text-decoration:none; }
+  .brand svg { width:28px; height:28px; }
+  h1 { font-size:26px; margin:20px 0 16px; letter-spacing:-0.02em; }
+  section { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin:12px 0; }
+  h2 { font-size:17px; margin:0 0 8px; }
+  p, li { color:var(--ink-2); font-size:15px; }
+  ol, ul { padding-left:20px; margin:6px 0; }
+  li { margin:4px 0; }
+  a { color:var(--accent-text); }
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="/">
+    <svg viewBox="0 0 600 600" aria-hidden="true"><rect width="600" height="600" fill="#178a4c"/><path d="M140 440 L255 305 L330 370 L455 200" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="square"/><rect x="412" y="158" width="86" height="86" fill="#fff"/></svg>
+    러닝로그
+  </a>
+  <h1>도움말</h1>
+
+  <section>
+    <h2>이렇게 써요</h2>
+    <ol>
+      <li><b>불러오기</b> — '기록 가져오기'로 건강 앱의 러닝을 고르거나, GPX·TCX 파일을 열거나, 기록을 직접 입력해요.</li>
+      <li><b>기록 확인</b> — 거리·페이스·심박·케이던스가 숫자가 차오르는 카드로 보여요.</li>
+      <li><b>내보내기</b> — 지도 여정 영상(2D·3D), 사진 워터마크, 투명 PNG, 카운트업 화면으로 저장하고 공유해요.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>자주 묻는 질문</h2>
+    <p><b>건강 앱에 있는 러닝이 목록에 안 보여요</b><br>
+    러닝을 기록한 앱(애플워치·가민 커넥트·나이키 런 클럽·코로스 등)에서 건강 앱 연동이 켜져 있는지 확인해 주세요. 건강 권한을 줄 때 '최근 30일'을 골랐다면 그 전 기록은 보이지 않아요. 설정 → 건강 → 데이터 접근 및 기기 → 러닝로그에서 바꿀 수 있어요.</p>
+    <p><b>지도 여정이 만들어지지 않아요</b><br>
+    GPS 경로가 있는 기록에서만 만들 수 있어요. 트레드밀·실내 러닝이나, 기록한 앱이 건강 앱에 경로를 넘기지 않은 경우(예: 가민 커넥트)에는 기록 카드와 사진만 만들 수 있어요. 그럴 땐 GPX 파일로 불러와 주세요.</p>
+    <p><b>심박·케이던스가 기록한 앱과 조금 달라요</b><br>
+    건강 앱에 평균값이 없는 기록은 달린 시간 동안의 심박·걸음 기록으로 계산해서 몇 정도 차이 날 수 있어요.</p>
+    <p><b>영상은 어디에 저장돼요?</b><br>
+    '영상 저장'을 누르면 공유 화면이 열려요. '비디오 저장'을 고르면 사진 앱에 저장되고, 인스타그램 등으로 바로 보낼 수도 있어요.</p>
+  </section>
+
+  <section>
+    <h2>문의</h2>
+    <p>안 되는 점이나 바라는 점은 <a href="https://github.com/Park3min/run/issues">GitHub 이슈</a>나 인스타그램 <a href="https://www.instagram.com/pki_runner/">@pki_runner</a>로 알려 주세요.</p>
+    <p><a href="/privacy.html">개인정보 처리방침</a></p>
+  </section>
+</main>
+</body>
+</html>

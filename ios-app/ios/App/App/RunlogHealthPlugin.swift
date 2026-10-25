@@ -33,9 +33,11 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// 연결 상태 — 권한을 이미 물어봤는지 ({asked}). 읽기 허용 여부 자체는 iOS 가 알려 주지 않는다.
     @objc func status(_ call: CAPPluginCall) {
-        guard HKHealthStore.isHealthDataAvailable() else { call.resolve(["asked": false, "available": false]); return }
+        // 가민 연결을 이 빌드에서 쓸지 (App Store 출시 빌드는 RUNLOG_GARMIN=NO 로 숨긴다)
+        let garmin = (Bundle.main.object(forInfoDictionaryKey: "RunlogGarmin") as? String ?? "YES") != "NO"
+        guard HKHealthStore.isHealthDataAvailable() else { call.resolve(["asked": false, "available": false, "garmin": garmin]); return }
         store.getRequestStatusForAuthorization(toShare: [], read: readTypes) { st, _ in
-            call.resolve(["asked": st == .unnecessary, "available": true])
+            call.resolve(["asked": st == .unnecessary, "available": true, "garmin": garmin])
         }
     }
 
