@@ -35,6 +35,27 @@ python3 -m venv .venv
 
 > 가민 연동은 커뮤니티 라이브러리([garminconnect](https://github.com/cyberjunky/python-garminconnect))를 사용합니다. 자격 증명은 가민 서버로만 전송되며, 서버는 localhost 에서만 동작합니다.
 
+### 아이폰 앱 (`ios-app/`)
+
+웹 코드(`index.html`·`route-map.js`·`garmin-web.js`)를 그대로 담은 [Capacitor](https://capacitorjs.com) 앱입니다. 웹에는 없는 기능:
+
+- **건강 앱에서 가져오기** — 애플워치 등으로 기록한 러닝의 거리·시간·GPS 경로·심박·걸음 수(케이던스)를 HealthKit 으로 읽어요 (`RunlogHealthPlugin.swift`).
+- **공유 시트로 저장** — 지도 영상·이미지를 앱이 직접 iOS 공유 시트로 넘겨 '비디오/이미지 저장'·인스타그램으로 보내요 (`RunlogSharePlugin.swift`). 웹 공유는 영상을 만드는 몇 초 사이 막히기 때문.
+- 가민 중계·방문자 수 요청은 앱의 네이티브 HTTP(`CapacitorHttp`)로 보내 CORS 제한을 받지 않아요.
+
+```bash
+cd ios-app
+npm install
+npm run sync      # 루트 웹 파일을 www/ 로 복사 → iOS 프로젝트에 반영 (웹 코드를 고친 뒤마다)
+npm run open      # Xcode 로 열기 → 실행
+```
+
+개발 빌드(Debug)에서 `-seedHealthDemo YES` 인자로 실행하면 시뮬레이터 건강 앱에 가상의 남산 러닝 기록(경로·심박·걸음 포함)과 실내 러닝 1개를 넣어 시험할 수 있어요.
+
+```bash
+xcrun simctl launch booted com.park3min.runlog -seedHealthDemo YES
+```
+
 ## 구성
 
 | 파일 | 역할 |

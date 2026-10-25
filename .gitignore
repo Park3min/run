@@ -12,3 +12,6 @@ __pycache__/
 # Cloudflare wrangler 로컬 캐시
 .wrangler/
 node_modules/
+
+# 아이폰 앱 빌드 산출물 (루트 웹 파일 복사본)
+ios-app/www/
