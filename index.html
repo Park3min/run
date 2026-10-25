@@ -913,6 +913,7 @@
         <div class="photo-controls">
           <span class="seg"><button id="chipMapKm" class="on">km 표시</button></span>
           <span class="seg"><button id="chipMapTrim" class="on">출발·도착 200m 가리기</button></span>
+          <span class="seg" id="chipMapSplitsWrap"><button id="chipMapSplits" title="거리 숫자 옆에 1km 구간 페이스를 작은 막대로 보여 줘요">구간 페이스 막대</button></span>
           <span class="seg" id="chipMapShadeWrap"><button id="chipMapShade" title="산·언덕의 높낮이를 그늘로 표시 (3D 는 항상 표시)">지형 음영</button></span>
         </div>
         </div>
@@ -1146,7 +1147,7 @@
 <!-- ?v= 는 파일 내용 해시 — 커스텀 도메인(Cloudflare)이 JS 를 브라우저에 4시간 캐시하므로,
      JS 를 고치면 반드시 바꿔야 새 index.html 과 옛 JS 가 섞여 깨지는 일이 없다 -->
 <script src="garmin-web.js?v=c0cb0cfa"></script>
-<script src="route-map.js?v=cefadc53"></script>
+<script src="route-map.js?v=7346bcfb"></script>
 <script>
 (() => {
   'use strict';
@@ -1162,7 +1163,7 @@
     customPos: null, // {fx, fy} 블록 좌상단 (캔버스 비율)
     route: null,     // GPS 경로 (RouteMap.analyze 결과를 저장용으로 압축)
     series: null,    // 거리별 심박·케이던스 {hr:[], cad:[]} (경로 없는 실내 러닝도)
-    map: { view: '2d', style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true, shade: false },
+    map: { view: '2d', style: 'dark', aspect: '1:1', color: 'pace', speed: 8, km: true, trim: true, shade: false, splits: false },
   };
 
   const $ = id => document.getElementById(id);
@@ -1445,6 +1446,7 @@
       trimM: state.map.trim ? 200 : 0,
       showKm: state.map.km,
       shade: !!state.map.shade,
+      splitBars: !!state.map.splits,
       overlay: {
         title: state.title,
         sub: state.showDate ? fmtDateWhen() : '',
@@ -1470,6 +1472,7 @@
     $('mapEmpty').hidden = has;
     $('mapWrap').hidden = !has;
     if (!has) { if (mapR) mapR.stop(); return; }
+    syncMapControls();                    // 경로마다 '구간 페이스 막대' 가능 여부가 다르다
     // 숨겨진 탭·단계는 폭을 모르니 보일 때 그린다
     if (!$('panelMap').classList.contains('show') || $('step3').hidden) { if (mapR) mapR.stop(); return; }
     const [aw, ah] = MAP_ASPECTS[state.map.aspect] || MAP_ASPECTS['1:1'];
@@ -1513,6 +1516,7 @@
   bindMapSeg('mapSpeedSeg', 'speed', Number);
   $('chipMapKm').addEventListener('click', () => { state.map.km = !state.map.km; syncMapControls(); saveSettings(); renderMapPanel(false); });
   $('chipMapTrim').addEventListener('click', () => { state.map.trim = !state.map.trim; syncMapControls(); saveSettings(); renderMapPanel(false); });
+  $('chipMapSplits').addEventListener('click', () => { state.map.splits = !state.map.splits; syncMapControls(); saveSettings(); renderMapPanel(false); });
   $('chipMapShade').addEventListener('click', () => { state.map.shade = !state.map.shade; syncMapControls(); saveSettings(); renderMapPanel(false); });
 
   function syncMapControls() {
@@ -1528,6 +1532,8 @@
     $('chipMapKm').classList.toggle('on', state.map.km);
     $('chipMapTrim').classList.toggle('on', state.map.trim);
     $('chipMapShade').classList.toggle('on', !!state.map.shade);
+    $('chipMapSplits').classList.toggle('on', !!state.map.splits);
+    $('chipMapSplitsWrap').style.display = state.route && state.route.hasTime ? '' : 'none';   // 시간 없는 경로는 구간을 못 나눈다
     $('chipMapShadeWrap').style.display = is3dView() ? 'none' : '';   // 3D 는 지형 음영이 늘 들어간다
   }
 
