@@ -71,12 +71,24 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 let range = HKQuery.predicateForSamples(withStart: oldest.addingTimeInterval(-60), end: Date(), options: [])
                 let rq = HKSampleQuery(sampleType: HKSeriesType.workoutRoute(), predicate: range, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, routes, _ in
                     let starts = (routes ?? []).map { $0.startDate }
-                    let list: [[String: Any]] = workouts.map { w in
+                    var list: [[String: Any]] = workouts.map { w in
                         var o = self.summary(w)
                         o["hasRoute"] = starts.contains { $0 >= w.startDate.addingTimeInterval(-60) && $0 <= w.endDate }
                         return o
                     }
-                    call.resolve(["workouts": list])
+                    // 평균 심박이 운동 기록에 없으면(가민 등이 넣은 운동) 그 시간 동안의 심박 기록 평균으로 채운다
+                    let group = DispatchGroup(), lock = NSLock()
+                    for (i, w) in workouts.enumerated() where list[i]["avgHr"] == nil {
+                        group.enter()
+                        let pred = HKQuery.predicateForSamples(withStart: w.startDate, end: w.endDate, options: [])
+                        self.store.execute(HKStatisticsQuery(quantityType: self.hrType, quantitySamplePredicate: pred, options: .discreteAverage) { _, st, _ in
+                            if let v = st?.averageQuantity()?.doubleValue(for: self.bpm) {
+                                lock.lock(); list[i]["avgHr"] = v; list[i]["avgHrEstimated"] = true; lock.unlock()
+                            }
+                            group.leave()
+                        })
+                    }
+                    group.notify(queue: .global()) { call.resolve(["workouts": list]) }
                 }
                 self.store.execute(rq)
             }
@@ -182,10 +194,12 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             self.seedRun(start: morning, outdoor: true)
             self.seedRun(start: morning.addingTimeInterval(-2 * 86400), outdoor: false)
             self.seedRun(start: morning.addingTimeInterval(-4 * 86400), outdoor: true, route: false)
+            // 가민처럼: 운동에 심박을 묶지 않고 심박 기록만 따로 (평균 심박이 운동 기록에 없음)
+            self.seedRun(start: morning.addingTimeInterval(-6 * 86400), outdoor: true, route: false, linkHr: false)
         }
     }
 
-    private func seedRun(start: Date, outdoor: Bool, route: Bool = true) {
+    private func seedRun(start: Date, outdoor: Bool, route: Bool = true, linkHr: Bool = true) {
         let lat0 = 37.5512, lon0 = 126.9882
         let mlat = 111_320.0, mlon = 111_320.0 * cos(lat0 * .pi / 180)
         // 점 · 누적 거리 · 시각
@@ -239,6 +253,11 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
         cfg.activityType = .running
         cfg.locationType = outdoor ? .outdoor : .indoor
         let builder = HKWorkoutBuilder(healthStore: store, configuration: cfg, device: .local())
+        if !linkHr {
+            let hrOnly = samples.filter { ($0 as? HKQuantitySample)?.quantityType == hrType }
+            samples.removeAll { ($0 as? HKQuantitySample)?.quantityType == hrType }
+            store.save(hrOnly) { _, _ in }
+        }
         builder.beginCollection(withStart: start) { _, _ in
             builder.add(samples) { _, _ in
                 var meta: [String: Any] = [HKMetadataKeyIndoorWorkout: !outdoor]

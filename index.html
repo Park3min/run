@@ -2065,8 +2065,11 @@
     if (a.elevGain) $('inElev').value = a.elevGain;
     $('inTitle').value = a.name;
     $('inDate').value = a.start.slice(0, 10); $('inStartTime').value = a.start.slice(11, 16);
-    // 경로가 없어도 심박·걸음 수는 있으면 쓴다 — 평균 케이던스, 그리고 시간 순서대로의 심박·케이던스 곡선
+    // 경로가 없어도 심박·걸음 수는 있으면 쓴다 — 평균 심박·케이던스, 그리고 시간 순서대로의 심박·케이던스 곡선
     if (w) {
+      // 운동 기록에 평균 심박이 없으면(가민이 넣은 운동 등) 달린 시간 동안의 심박 기록으로 평균을 낸다
+      const hrs = (w.hr || []).map(h => h[1]).filter(v => v > 30 && v < 230);
+      if (!a.avgHr && hrs.length) $('inHr').value = Math.round(hrs.reduce((x, y) => x + y, 0) / hrs.length);
       const steps = (w.steps || []).filter(s => s[1] > s[0]);
       const total = steps.reduce((n, s) => n + s[2], 0);
       const cad = a.durationSec > 0 ? total / (a.durationSec / 60) : 0;
