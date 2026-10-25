@@ -7,7 +7,6 @@ class RunlogViewController: CAPBridgeViewController {
         let health = RunlogHealthPlugin()
         bridge?.registerPluginInstance(health)
         bridge?.registerPluginInstance(RunlogSharePlugin())
-        bridge?.registerPluginInstance(RunlogAuthPlugin())
         #if DEBUG
         // 개발용 예시 기록: xcrun simctl launch <기기> com.park3min.runlog -seedHealthDemo YES
         // 권한 창은 화면이 뜬 뒤에만 나타나므로 잠시 뒤에 요청한다
