@@ -44,8 +44,21 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
             let q = HKSampleQuery(sampleType: .workoutType(), predicate: pred, limit: limit, sortDescriptors: [sort]) { _, samples, err in
                 if let err = err { call.reject(err.localizedDescription); return }
-                let list: [[String: Any]] = (samples as? [HKWorkout] ?? []).map { self.summary($0) }
-                call.resolve(["workouts": list])
+                let workouts = samples as? [HKWorkout] ?? []
+                guard let oldest = workouts.last?.startDate else { call.resolve(["workouts": []]); return }
+                // 경로가 실제로 있는지 — 운동마다 묻지 않고 기간 안의 경로를 한 번에 받아 시간으로 맞춘다
+                // (야외 러닝이어도 기록한 앱이 경로를 건강 앱에 넘기지 않으면 없다)
+                let range = HKQuery.predicateForSamples(withStart: oldest.addingTimeInterval(-60), end: Date(), options: [])
+                let rq = HKSampleQuery(sampleType: HKSeriesType.workoutRoute(), predicate: range, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, routes, _ in
+                    let starts = (routes ?? []).map { $0.startDate }
+                    let list: [[String: Any]] = workouts.map { w in
+                        var o = self.summary(w)
+                        o["hasRoute"] = starts.contains { $0 >= w.startDate.addingTimeInterval(-60) && $0 <= w.endDate }
+                        return o
+                    }
+                    call.resolve(["workouts": list])
+                }
+                self.store.execute(rq)
             }
             self.store.execute(q)
         }
@@ -135,7 +148,8 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     #if DEBUG
-    /// 개발용: 시뮬레이터 건강 앱에 가상의 러닝 기록을 넣는다 (남산 둘레 가상 루프 + 실내 러닝 1개).
+    /// 개발용: 시뮬레이터 건강 앱에 가상의 러닝 기록을 넣는다
+    /// (남산 둘레 가상 루프 + 실내 러닝 + 경로 없이 저장된 야외 러닝 — 경로를 넘기지 않는 앱의 기록 흉내).
     /// 실행 인자 `-seedHealthDemo YES` 로 앱을 켜면 한 번 실행된다. 실제 사용자 데이터가 아니다.
     func seedDemo() {
         let share: Set<HKSampleType> = [.workoutType(), HKSeriesType.workoutRoute(), hrType, stepType, distType]
@@ -146,10 +160,11 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             let morning = cal.date(bySettingHour: 6, minute: 30, second: 0, of: Date())!.addingTimeInterval(-86400)
             self.seedRun(start: morning, outdoor: true)
             self.seedRun(start: morning.addingTimeInterval(-2 * 86400), outdoor: false)
+            self.seedRun(start: morning.addingTimeInterval(-4 * 86400), outdoor: true, route: false)
         }
     }
 
-    private func seedRun(start: Date, outdoor: Bool) {
+    private func seedRun(start: Date, outdoor: Bool, route: Bool = true) {
         let lat0 = 37.5512, lon0 = 126.9882
         let mlat = 111_320.0, mlon = 111_320.0 * cos(lat0 * .pi / 180)
         // 점 · 누적 거리 · 시각
@@ -211,7 +226,7 @@ public class RunlogHealthPlugin: CAPPlugin, CAPBridgedPlugin {
                     builder.endCollection(withEnd: end) { _, _ in
                         builder.finishWorkout { workout, err in
                             guard let workout = workout else { print("seed: 실패 \(String(describing: err))"); return }
-                            guard outdoor else { print("seed: 실내 러닝 저장"); return }
+                            guard outdoor && route else { print("seed: 경로 없는 러닝 저장"); return }
                             let rb = HKWorkoutRouteBuilder(healthStore: self.store, device: .local())
                             rb.insertRouteData(locs) { _, _ in
                                 rb.finishRoute(with: workout, metadata: nil) { _, err in print("seed: 야외 러닝 + 경로 저장 \(String(describing: err))") }

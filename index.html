@@ -1754,7 +1754,7 @@
       b.innerHTML =
         `<div class="g-name">${escapeHtml(a.name)}${a.isRun ? '<span class="g-tag">RUN</span>' : ''}` +
         `${a.isRun ? (a.hasGps === false ? '<span class="g-tag off">GPS 없음</span>' : '<span class="g-tag map">지도</span>') : ''}</div>` +
-        `<div class="g-meta">${escapeHtml((a.start || '').slice(0, 16))} · ` +
+        `<div class="g-meta">${a.source ? `${escapeHtml(a.source)} · ` : ''}${escapeHtml((a.start || '').slice(0, 16))} · ` +
         `${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)}` +
         `${a.avgHr ? ` · ♥ ${a.avgHr}` : ''}${a.elevGain ? ` · ▲ ${a.elevGain}m` : ''}</div>`;
       b.addEventListener('click', () => (gSource === 'health' ? pickHealthWorkout(a) : pickGarminActivity(a)));
@@ -1835,8 +1835,9 @@
         const { workouts } = await Health.listWorkouts({ limit: 30 });
         gSource = 'health';
         openGarminPicker(workouts.map(w => ({
-          id: w.id, name: w.name, isRun: true, hasGps: !w.indoor,
-          start: localIso(new Date(w.start)),
+          id: w.id, name: w.name, source: w.source, isRun: true, indoor: w.indoor,
+          hasGps: w.hasRoute != null ? w.hasRoute : !w.indoor,
+          start: localIso(new Date(w.start)), startMs: w.start,
           distanceKm: (w.distance || 0) / 1000, durationSec: w.duration || 0,
           avgHr: w.avgHr ? Math.round(w.avgHr) : null,
           elevGain: w.elevGain ? Math.round(w.elevGain) : null,
@@ -1866,8 +1867,9 @@
   async function pickHealthWorkout(a) {
     $('gModal').classList.remove('show');
     $('csvStatus').textContent = `${a.name} 불러오는 중…`;
+    let w = null;
     try {
-      const w = await Health.getWorkout({ id: a.id });
+      w = await Health.getWorkout({ id: a.id });
       const pts = healthPts(w);
       if (pts.length > 1) { loadTrack(a.name, pts, a.name); return; }
     } catch (e) { /* 경로 없이 요약만 채운다 */ }
@@ -1879,10 +1881,24 @@
     if (a.elevGain) $('inElev').value = a.elevGain;
     $('inTitle').value = a.name;
     $('inDate').value = a.start.slice(0, 10); $('inStartTime').value = a.start.slice(11, 16);
+    // 경로가 없어도 심박·걸음 수는 있으면 쓴다 — 평균 케이던스, 그리고 시간 순서대로의 심박·케이던스 곡선
+    if (w) {
+      const steps = (w.steps || []).filter(s => s[1] > s[0]);
+      const total = steps.reduce((n, s) => n + s[2], 0);
+      const cad = a.durationSec > 0 ? total / (a.durationSec / 60) : 0;
+      if (cad > 100 && cad < 260) $('inCad').value = Math.round(cad);
+      const t0 = a.startMs || 0;
+      const samples = (w.hr || []).map(([t, v]) => ({ d: t - t0, hr: v }))
+        .concat(steps.map(([s0, s1, n]) => ({ d: (s0 + s1) / 2 - t0, cad: n / ((s1 - s0) / 60000) })))
+        .filter(p => p.d >= 0);
+      if (samples.length > 10) state.series = RM.attachSeries({ totalM: a.distanceKm * 1000 }, samples).series;
+    }
     syncPickerLabels();
     const ok = applyRecord();
-    $('mapEmptyNote').textContent = '이 활동은 GPS 경로가 없어요 (트레드밀·실내 러닝). 지도 여정은 야외에서 GPS 로 기록한 활동에서 만들 수 있어요';
-    $('csvStatus').textContent = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러왔어요 · GPS 경로가 없는 활동이라 기록만 채웠어요`;
+    // 야외 러닝인데 경로가 없으면, 기록한 앱이 건강 앱에 경로를 넘기지 않은 경우다 (예: 폰만으로 기록한 일부 앱)
+    const why = a.indoor ? 'GPS 경로가 없는 실내 러닝이에요' : `건강 앱에 이 러닝의 GPS 경로가 없어요${a.source ? ` (${a.source} 기록)` : ''}`;
+    $('mapEmptyNote').textContent = `${why}. 지도 여정은 GPS 경로가 있는 기록에서 만들 수 있어요`;
+    $('csvStatus').textContent = `✓ ${a.name} — ${a.distanceKm.toFixed(2)}km · ${fmtTime(a.durationSec)} 불러왔어요 · ${why}. 기록만 채웠어요`;
     if (ok) goStep(2, { note: $('csvStatus').textContent });
   }
 
