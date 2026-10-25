@@ -1,5 +1,7 @@
 # 러닝로그
 
+> 이어서 작업한다면 [docs/HANDOFF.md](docs/HANDOFF.md) 부터 읽어 주세요.
+
 러닝 기록을 카운트업 애니메이션으로 보여주고, 사진 위에 기록을 워터마크처럼 새겨 저장하는 웹 앱.
 
 ![app](https://img.shields.io/badge/web-vanilla%20JS-c8f542) ![server](https://img.shields.io/badge/server-python-3776ab)
