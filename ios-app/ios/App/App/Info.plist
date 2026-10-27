@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>기록을 새길 사진을 바로 찍을 때 카메라를 사용해요.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>건강 앱에 기록된 러닝(거리·시간·GPS 경로·심박·걸음 수)을 불러와 기록 카드와 지도 영상을 만들어요.</string>
+	<string>Apple 건강 앱에 기록된 러닝(거리·시간·GPS 경로·심박·걸음 수)을 읽어 와 기록 카드와 지도 영상을 만들어요. 읽기만 하고 기기 밖으로 보내지 않아요.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>러닝로그는 건강 앱에 기록을 쓰지 않아요. 앱 개발 중 시험용 예시 기록을 넣을 때만 쓰는 항목이에요.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
